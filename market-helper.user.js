@@ -2,7 +2,7 @@
 // @name         MARKET ENHANCER
 // @namespace    lzt.market.rare-skins
 // @version      1.0
-// @description  rare shit + FunPay auto-reseller
+// @description  rare shit 
 // @match        https://lzt.market/*
 // @match        https://lolz.team/*
 // @match        https://lolz.live/*
@@ -735,7 +735,9 @@
             name: String((x && x.name) || '').trim(),
             color: ((x && x.color) || fallback[0] && fallback[0].color || '#ffce14'),
             effect: (x && x.effect) || 'none',
-            minPower: Math.max(0, parseInt(x && x.minPower, 10) || 0)
+            minPower: Math.max(0, parseInt(x && x.minPower, 10) || 0),
+            minTrophies: Math.max(0, parseInt(x && x.minTrophies, 10) || 0),
+            minRank: Math.max(0, parseInt(x && x.minRank, 10) || 0)
         })).filter(x => x.name);
     }
 
@@ -1772,13 +1774,13 @@
             #rareModal .rareChip .rareEffectMark.on::after { content:''!important;display:block!important;position:absolute!important;left:4px!important;top:0px!important;width:5px!important;height:10px!important;border:solid #fff!important;border-width:0 2px 2px 0!important;transform:rotate(45deg)!important;box-sizing:border-box!important; }
             #rareModal .rareChip .del { cursor:pointer;color:#6b7076;background:none;border:none;padding:2px;border-radius:6px;display:flex;transition:all .15s; }
             #rareModal .rareChip .del:hover { color:var(--rare-accent); }
-            #rareModal .rareItemsView[data-view="fortnite"] .rareList { display:grid;grid-template-columns:minmax(0,1fr);gap:8px;max-height:360px;overflow-y:auto;overflow-x:hidden; }
-            #rareModal .rareItemsView[data-view="fortnite"] .rareChip { min-height:40px;padding:5px 9px;gap:7px; }
-            #rareModal .rareItemsView[data-view="fortnite"] .rareChip .name { font-size:12px; }
-            #rareModal .rareItemsView[data-view="fortnite"] .rareChip .rareChipChecks { gap:2px;min-width:92px; }
-            #rareModal .rareItemsView[data-view="fortnite"] .rareChip .rareEffectSelect { padding:4px 6px;font-size:11px; }
-            #rareModal .rareItemsView[data-view="fortnite"] .rareChip .rareEffectCheck { font-size:11px; }
-            #rareModal .rareItemsView[data-view="fortnite"] .rareChip .dot { width:18px;height:18px; }
+            #rareModal .rareList { display:grid;grid-template-columns:minmax(0,1fr);gap:8px;max-height:360px;overflow-y:auto;overflow-x:hidden; }
+            #rareModal .rareChip { min-height:40px;padding:5px 9px;gap:7px; }
+            #rareModal .rareChip .name { font-size:12px; }
+            #rareModal .rareChip .rareChipChecks { gap:2px;min-width:92px; }
+            #rareModal .rareChip .rareEffectSelect { padding:4px 6px;font-size:11px; }
+            #rareModal .rareChip .rareEffectCheck { font-size:11px; }
+            #rareModal .rareChip .dot { width:18px;height:18px; }
             #rareModal .rareEmpty { color:#5a5e63;font-size:12px;text-align:center;padding:16px; }
             #rareModal .rareHint { margin-top:12px;display:flex;gap:8px;background:#14171a;border-radius:8px;padding:10px 12px;color:#8c8c8c;font-size:12px;line-height:1.4; }
             #rareModal .rareHint b { color:var(--rare-accent); }
@@ -2157,10 +2159,7 @@
             #rareModal .rareFpVar:active { transform:translateY(0); }
             #rareModal .rareFpVar.is-copied { border-color:var(--rare-accent);box-shadow:0 0 0 2px rgba(var(--rare-accent-rgb,63,188,135),.28); }
             #rareModal .rareFpVar code { font:600 12px/1 "SFMono-Regular",Consolas,monospace;color:var(--rare-accent,#3fbc87);letter-spacing:.01em; }
-            #rareFunpayFloatBtn { width:59px;height:59px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#f5f7fb;background:linear-gradient(180deg,rgba(63,188,135,.34),rgba(63,188,135,.18)),rgb(10,12,16);border:1px solid rgba(63,188,135,.34);box-shadow:0 10px 34px rgba(63,188,135,.2);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);transition:transform .18s ease,filter .18s ease; }
-            #rareFunpayFloatBtn:hover { transform:translateY(-2px);filter:brightness(1.1); }
-            #rareFunpayFloatBtn svg { width:24px;height:24px; }
-            @media (max-width:1260px) { #rareFunpayFloatBtn { display:none!important; } }
+
     `;
     const _RARE_STYLES = [_CSS_ITEMS, _CSS_FLOAT_BTN, _CSS_PANEL, _CSS_MODAL_BASE, _CSS_TOAST, _CSS_ACTIVITY, _CSS_CUSTOM, _CSS_REDESIGN, _CSS_STEAM_PANEL, _CSS_VALORANT, _CSS_FORTNITE, _CSS_FUNPAY].join('');
     function injectStyles() {
@@ -2883,7 +2882,7 @@
         box.querySelector('.rareBtnExport').addEventListener('click', () => {
             const wanted = {};
             CONFIG_CATEGORY_KEYS.forEach(key => {
-                wanted[key] = drafts[key].items.map(x => ({ name: x.name, color: x.color, effect: x.effect || 'none', minPower: Math.max(0, parseInt(x.minPower, 10) || 0) }));
+                wanted[key] = drafts[key].items.map(x => ({ name: x.name, color: x.color, effect: x.effect || 'none', minPower: Math.max(0, parseInt(x.minPower, 10) || 0), minTrophies: Math.max(0, parseInt(x.minTrophies, 10) || 0), minRank: Math.max(0, parseInt(x.minRank, 10) || 0) }));
             });
             const payload = {
                 version: 1,
@@ -2932,7 +2931,7 @@
             const prevApiSettings = API_SETTINGS;
             CONFIG_CATEGORY_KEYS.forEach(k => {
                 const c = CATEGORIES[k];
-                c.wanted = drafts[k].items.map(x => ({ name: x.name, color: x.color, effect: x.effect || 'none', minPower: Math.max(0, parseInt(x.minPower, 10) || 0) }));
+                c.wanted = drafts[k].items.map(x => ({ name: x.name, color: x.color, effect: x.effect || 'none', minPower: Math.max(0, parseInt(x.minPower, 10) || 0), minTrophies: Math.max(0, parseInt(x.minTrophies, 10) || 0), minRank: Math.max(0, parseInt(x.minRank, 10) || 0) }));
                 saveWanted(c, c.wanted);
             });
             ACT_LEVELS = sortLevels(actDraft).map(l => ({ min: l.min, max: l.max, color: l.color, effect: sanitizeActivityEffect(l.effect) }));
@@ -5659,7 +5658,6 @@
         updateLastActivityDays();
         ensureAutoTitleButton();
         ensureFunpayButton();
-        ensureFunpayFloatButton();
         ensureFloatingButton();
         ensureFloatingButtonWatchers();
         positionFloatingButton();
@@ -6766,29 +6764,6 @@
         updateFunpayButtons();
     }
 
-    // ВРЕМЕННО: вторая кнопка публикации рядом с плавающей кнопкой меню.
-    function ensureFunpayFloatButton() {
-        const menuBtn = document.getElementById('rareFloatBtn');
-        if (!menuBtn) return;
-        const game = detectGame();
-        const ready = FUNPAY_ADAPTERS[game] && FUNPAY_ADAPTERS[game].ready;
-        let btn = document.getElementById('rareFunpayFloatBtn');
-        if (!ready) { if (btn) btn.remove(); return; }
-        if (!btn) {
-            btn = document.createElement('div');
-            btn.id = 'rareFunpayFloatBtn';
-            btn.title = 'Опубликовать на FunPay (временная кнопка)';
-            btn.innerHTML = funpaySvg();
-            btn.addEventListener('click', () => funpayTriggerPublish());
-            document.body.appendChild(btn);
-        }
-        // Ставим слева от кнопки меню.
-        const cs = getComputedStyle(menuBtn);
-        btn.style.position = 'fixed';
-        btn.style.right = (parseInt(cs.right, 10) || 5) + 62 + 'px';
-        btn.style.bottom = cs.bottom;
-        btn.style.zIndex = cs.zIndex || '2147483000';
-    }
 
     const funpaySvg = () => '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v4H3z"/><path d="M6 7v14"/><path d="M6 13h10"/><path d="M6 9h12"/></svg>';
 
