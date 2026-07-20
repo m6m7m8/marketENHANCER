@@ -1,4 +1,4 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name         MARKET ENHANCER
 // @namespace    lzt.market.rare-skins
 // @version      1.0
@@ -693,6 +693,10 @@
             .trim();
         next.publishedAgeEnabled = next.publishedAgeEnabled !== false;
         next.cs2InventoryPriceEnabled = next.cs2InventoryPriceEnabled !== false;
+        delete next.autoBumpEnabled;
+        delete next.autoBumpHours;
+        delete next.autoStickEnabled;
+        delete next.autoStickCount;
         return next;
     }
     function makeSettingsStore(key, defaults, normalize) {
@@ -2144,7 +2148,7 @@
             .rareFpMsg { margin-top:4px;font-size:12px;color:#c58b8b;overflow-wrap:anywhere; }
             #rareModal .rareFpField { display:flex;flex-direction:column;gap:5px;margin-bottom:12px; }
             #rareModal .rareFpLabel { font-size:12px;font-weight:600;color:#b9c0cb;letter-spacing:.01em; }
-            #rareModal .rareFpField input, #rareModal .rareFpField textarea { width:100%;background:#101214;color:#eee;border:1px solid #2f3338;border-radius:8px;padding:10px 12px;font:13px/1.45 inherit;outline:none;resize:vertical;box-sizing:border-box;transition:border-color .15s; }
+            #rareModal .rareFpField input, #rareModal .rareFpField textarea { width:100%;background:var(--rare-modal-bg-strong,#101214);color:#eee;border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:10px 12px;font:13px/1.45 inherit;outline:none;resize:vertical;box-sizing:border-box;transition:border-color .15s; }
             #rareModal .rareFpField textarea { min-height:92px;font-size:12px; }
             #rareModal .rareFpField input:focus, #rareModal .rareFpField textarea:focus { border-color:var(--rare-accent); }
             #rareModal .rareFpVars { display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 14px; }
@@ -2205,7 +2209,7 @@
             + '<p class="rareSubTxt rareListDesc"></p>'
             + '<div class="rareInputRow"><input type="text" class="rareInput" placeholder="" maxlength="80"><button class="rareAddBtn" title="Добавить">+</button></div>'
             + '<div class="rareLevelFilter" style="display:none">'
-            +   '<label class="rareLevelToggle"><input type="checkbox" class="rareLevelEnabled"><span>Поиск по уровню (независимо от названия)</span></label>'
+            +   '<label class="rareLevelToggle"><input type="checkbox" class="rareLevelEnabled"><span>Минимальный уровень</span></label>'
             +   '<div class="rareLevelRow"><span class="rareLevelLbl">Мин. уровень</span><input type="number" min="1" max="999" class="rareLevelMin" placeholder="напр. 80"></div>'
             + '</div>'
             + '<div class="rareList"></div>'
