@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MARKET ENHANCER
 // @namespace    lzt.market.rare-skins
-// @version      1.0
+// @version      1.1
 // @description  rare shit 
 // @match        https://lzt.market/*
 // @match        https://lolz.team/*
@@ -240,7 +240,21 @@
             listDesc: 'Добавьте названия скинов, которые нужно искать в объявлениях.',
             inputPlaceholder: 'Название скина',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'Champions 2022', color: '#ffce14' }, { name: 'Поднебесная', color: '#ffce14' }],
+            defaultWanted: [
+                { name: 'Нож-бабочка "Champions 2022"', color: '#ffce14', effect: 'shimmer' },
+                { name: 'Керамбит "Champions 2021"', color: '#ffce14', effect: 'none' },
+                { name: 'Sheriff "Аркейн"', color: '#ffce14', effect: 'shimmer' },
+                { name: 'Phantom "Champions 2022"', color: '#ffce14', effect: 'none' },
+                { name: 'Phantom "Champions 2024"', color: '#ffce14', effect: 'none' },
+                { name: 'Нож-бабочка "Champions 2025"', color: '#ffce14', effect: 'none' },
+                { name: 'Клинок "Champions 2024"', color: '#ffce14', effect: 'none' },
+                { name: 'Мизерикордия "VCT LOCK//IN"', color: '#ffce14', effect: 'none' },
+                { name: 'Vandal "Champions 2021"', color: '#ffce14', effect: 'none' },
+                { name: 'Кунай "Champions 2023"', color: '#ffce14', effect: 'none' },
+                { name: 'Vandal "Champions 2023"', color: '#ffce14', effect: 'none' },
+                { name: 'Vandal "Champions 2025"', color: '#ffce14', effect: 'none' },
+                { name: 'Керамбит "VCT 2025"', color: '#ffce14', effect: 'none' },
+            ],
         },
         buddies: {
             tabKey: 'buddies',
@@ -253,7 +267,10 @@
             listDesc: 'Добавьте названия брелков, которые нужно искать в объявлениях.',
             inputPlaceholder: 'Название брелка',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'Champions 2022', color: '#ffce14' }],
+            defaultWanted: [
+                { name: 'кулачки', color: '#237580', effect: 'none' },
+                { name: 'радиант', color: '#258693', effect: 'none' },
+            ],
         },
         lol: {
             tabKey: 'lol',
@@ -279,7 +296,38 @@
             listDesc: 'Добавьте названия предметов, которые нужно искать во всех разделах Fortnite.',
             inputPlaceholder: 'Название предмета',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'Red Knight', color: '#ffce14' }],
+            defaultWanted: [
+                { name: 'GALAXY', color: '#e2b200', effect: 'none' },
+                { name: 'OG GHOUL TROOPER', color: '#e2b200', effect: 'shimmer' },
+                { name: 'OG SKULL TROOPER', color: '#e2b200', effect: 'none' },
+                { name: 'Renegade Raider (OG)', color: '#e2b200', effect: 'shimmer' },
+                { name: 'Aerial Assault Trooper (OG)', color: '#bf9802', effect: 'none' },
+                { name: "Raider's Revenge (OG)", color: '#ffce0a', effect: 'none' },
+                { name: 'BLACK KNIGHT', color: '#e2b200', effect: 'none' },
+                { name: 'WONDER', color: '#ffce14', effect: 'none' },
+                { name: 'TRAVIS SCOTT', color: '#e2b200', effect: 'none' },
+                { name: 'Honor Guard', color: '#e2b200', effect: 'none' },
+                { name: 'Rogue Spider Knight', color: '#e2b200', effect: 'none' },
+                { name: 'Royale Knight', color: '#e2b200', effect: 'none' },
+                { name: 'AC/DC', color: '#e2b200', effect: 'none' },
+                { name: 'Take The L', color: '#e2b200', effect: 'none' },
+                { name: 'Mako', color: '#e2b200', effect: 'none' },
+                { name: 'Rose Team Leader', color: '#e2b200', effect: 'none' },
+                { name: 'The Reaper', color: '#e2b200', effect: 'none' },
+                { name: 'IKONIK', color: '#e2b200', effect: 'shimmer' },
+                { name: 'Sparkle Specialist', color: '#ffce14', effect: 'none' },
+                { name: 'Royale Bomber', color: '#ffce14', effect: 'none' },
+                { name: 'Glow', color: '#ffce14', effect: 'none' },
+                { name: 'Blue Squire', color: '#ffce14', effect: 'none' },
+                { name: 'Merry Mint Axe', color: '#ffce14', effect: 'none' },
+                { name: 'Floss', color: '#ffce14', effect: 'none' },
+                { name: 'Aerial Assault One (OG)', color: '#ffce14', effect: 'none' },
+                { name: 'Rue', color: '#ffce14', effect: 'none' },
+                { name: 'Wildcat', color: '#ffce14', effect: 'none' },
+                { name: 'Eon', color: '#ffce14', effect: 'none' },
+                { name: 'Dark Vertex', color: '#ffce14', effect: 'none' },
+                { name: 'Leviathan Axe', color: '#ffce14', effect: 'none' },
+            ],
         },
         genshin: {
             tabKey: 'mihoyo',
