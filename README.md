@@ -33,15 +33,21 @@ Userscript для удобной работы с [LZT Market](https://lzt.market
 
 **Автоназвание.** Скрипт может собрать название лота из количества предметов и найденных редких. Например: `154 skins / GALAXY, IKONIK, BLACK KNIGHT`. Название автоматически урезается под лимит LZT. Учитывается также приоритет первых редких выбранный вами.
 
-<img width="101" height="43" alt="image" src="https://github.com/user-attachments/assets/ca890156-8bb4-41b5-a720-13b407cdb542" />
-<img width="599" height="73" alt="image" src="https://github.com/user-attachments/assets/f6aa0b09-b011-4372-a405-8828a32a0ca1" />
-
+<img width="427" height="42" alt="image" src="https://github.com/user-attachments/assets/58bc7553-8912-4260-8f80-e971c1375c55" />
 
 **Дни активности.** На странице товара рядом с последней активностью добавляется понятный бейдж с количеством дней. Цвет зависит от настроенных диапазонов.
+<img width="300" height="88" alt="image" src="https://github.com/user-attachments/assets/6bf8681e-0fe0-4744-97ae-28f78ba0c610" />
+
 
 **Дни с публикации.** В категориях маркета скрипт показывает, сколько дней назад был опубликован лот. На главной странице LZT эта функция отключена, потому что там смешаны разные категории.
 
+<img width="1014" height="219" alt="image (34)" src="https://github.com/user-attachments/assets/4816ecb4-27e1-415e-8b54-627c55c6bb62" />
+
+
 **Цены редких предметов.** Скрипт через API ищет похожие аккаунты и показывает минимальную/среднюю цену и количество найденных аккаунтов с ТАКОЙ ЖЕ ОТЛЕГОЙ. Для Valorant учитывается также регион.
+
+<img width="958" height="583" alt="image (37)" src="https://github.com/user-attachments/assets/ae814d20-fcd2-4c9b-9741-ad0d5f065ff4" />
+
 
 **CS2-инвентарь через market.csgo.com.** Скрипт считает стоимость CS2-инвентаря по ценам market.csgo.com, показывает найденные цены по предметам и процент разницы относительно стоимости именно CS2-инвентаря.
 
