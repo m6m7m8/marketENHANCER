@@ -46,10 +46,14 @@ Userscript для удобной работы с [LZT Market](https://lzt.market
 
 **Цены редких предметов.** Скрипт через API ищет похожие аккаунты и показывает минимальную/среднюю цену и количество найденных аккаунтов с ТАКОЙ ЖЕ ОТЛЕГОЙ. Для Valorant учитывается также регион.
 
-<img width="958" height="583" alt="image (37)" src="https://github.com/user-attachments/assets/ae814d20-fcd2-4c9b-9741-ad0d5f065ff4" />
+<img width="650" height="398" alt="image (38)" src="https://github.com/user-attachments/assets/5de81dd8-1a69-463c-bdbc-5a62ecab754d" />
 
 
 **CS2-инвентарь через market.csgo.com.** Скрипт считает стоимость CS2-инвентаря по ценам market.csgo.com, показывает найденные цены по предметам и процент разницы относительно стоимости именно CS2-инвентаря.
+
+<img width="328" height="91" alt="image" src="https://github.com/user-attachments/assets/d571bb17-cc02-4917-98c2-4cb7846014f9" />
+
+
 
 **FunPay Uploader.** Публикует товар со скринами скинов за 10 секунд. Название, описание, картинки и параметры, ставит задачу в очередь и создаёт лот на FunPay.
 
