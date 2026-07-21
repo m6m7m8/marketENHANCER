@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MARKET ENHANCER
 // @namespace    lzt.market.rare-skins
-// @version      1.1
+// @version      1.2
 // @description  rare shit 
 // @match        https://lzt.market/*
 // @match        https://lolz.team/*
@@ -222,6 +222,137 @@
         link.target = '_blank';
         link.rel = 'noopener';
         parent.appendChild(link);
+    }
+
+    // Переиспользуемый drag-n-drop с живым предпросмотром (FLIP-анимация).
+    // container — родитель элементов; itemSelector — селектор перетаскиваемых карточек
+    // (у каждого data-idx = исходный индекс в массиве);
+    // handleSelector — "ручка" (null = тащим за весь элемент);
+    // onReorder(orderedIndexes) — по завершению отдаёт исходные индексы в новом порядке.
+    //
+    // Работает и для flex-, и для grid-списков: позиция вставки определяется по
+    // ближайшему к курсору элементу, а не по вертикальному "before/after". Исходный
+    // узел во время drag не двигается (схлопывается CSS-классом), двигается только
+    // плейсхолдер. Реальная перестановка DOM — один раз, на dragend.
+    function enableDragReorder(container, itemSelector, handleSelector, onReorder) {
+        if (!container || container._dragReorderBound) return;
+        container._dragReorderBound = true;
+        let dragEl = null;
+        let placeholder = null;
+
+        // Все "живые" элементы списка (без плейсхолдера и без схлопнутого оригинала).
+        const liveItems = () => Array.from(container.querySelectorAll(itemSelector))
+            .filter(el => el !== placeholder && el !== dragEl);
+
+        // FLIP: снимаем позиции ДО перестановки, затем анимируем разницу.
+        function recordRects() {
+            const map = new Map();
+            Array.from(container.children).forEach(el => {
+                if (el === dragEl) return;
+                map.set(el, el.getBoundingClientRect());
+            });
+            return map;
+        }
+        function playFlip(prevRects) {
+            Array.from(container.children).forEach(el => {
+                if (el === dragEl) return;
+                const prev = prevRects.get(el);
+                if (!prev) return;
+                const next = el.getBoundingClientRect();
+                const dx = prev.left - next.left;
+                const dy = prev.top - next.top;
+                if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+                el.style.transition = 'none';
+                el.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+                requestAnimationFrame(() => {
+                    el.style.transition = 'transform .16s ease';
+                    el.style.transform = '';
+                });
+            });
+        }
+
+        // Куда вставить плейсхолдер: перебираем элементы сверху вниз и находим первый,
+        // выше середины которого оказался курсор — плейсхолдер встаёт перед ним.
+        // Порог = середина элемента, поэтому позиция меняется сразу при пересечении
+        // половины соседа, а не когда курсор доедет до его центра.
+        function computeInsertRef(x, y) {
+            const els = liveItems();
+            for (const el of els) {
+                const r = el.getBoundingClientRect();
+                if (y < r.top + r.height / 2) return el;
+            }
+            return null;
+        }
+
+        function movePlaceholderTo(refEl) {
+            if (!placeholder) return;
+            // refEl === placeholder или уже стоит перед refEl — ничего не делаем (антидребезг).
+            if (refEl === placeholder) return;
+            if (refEl === placeholder.nextSibling) return;
+            const prevRects = recordRects();
+            container.insertBefore(placeholder, refEl);
+            playFlip(prevRects);
+        }
+
+        container.addEventListener('dragstart', e => {
+            const handle = handleSelector ? e.target.closest(handleSelector) : e.target;
+            const item = e.target.closest(itemSelector);
+            if (!item || (handleSelector && !handle)) { e.preventDefault(); return; }
+            dragEl = item;
+            e.dataTransfer.effectAllowed = 'move';
+            try { e.dataTransfer.setData('text/plain', item.dataset.idx || ''); } catch (err) {}
+            try { e.dataTransfer.setDragImage(item, 10, 10); } catch (err) {}
+
+            const rect = item.getBoundingClientRect();
+            placeholder = createNode('div', 'rareDragPlaceholder');
+            placeholder.style.height = rect.height + 'px';
+            container.classList.add('rareDragging');
+            container.insertBefore(placeholder, item.nextSibling);
+            // Схлопываем оригинал ПОСЛЕ захвата drag-превью (setDragImage выше) —
+            // визуально остаётся только плейсхолдер.
+            requestAnimationFrame(() => { if (dragEl) dragEl.classList.add('rareDragActive'); });
+
+            // Фикс "мигающего" not-allowed: браузер требует preventDefault() на каждом
+            // dragenter/dragover. Ловим на document в фазе capture — раньше чужих обработчиков.
+            document.addEventListener('dragenter', allowDrop, true);
+            document.addEventListener('dragover', allowDrop, true);
+        });
+
+        function allowDrop(e) {
+            if (!dragEl) return;
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        }
+
+        container.addEventListener('dragover', e => {
+            if (!dragEl || !placeholder) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const ref = computeInsertRef(e.clientX, e.clientY);
+            movePlaceholderTo(ref);
+        });
+
+        container.addEventListener('drop', e => { e.preventDefault(); });
+
+        container.addEventListener('dragend', () => {
+            if (!dragEl) return;
+            document.removeEventListener('dragenter', allowDrop, true);
+            document.removeEventListener('dragover', allowDrop, true);
+            dragEl.classList.remove('rareDragActive');
+            dragEl.style.transition = '';
+            dragEl.style.transform = '';
+            container.classList.remove('rareDragging');
+            if (placeholder) {
+                container.insertBefore(dragEl, placeholder);
+                placeholder.remove();
+                placeholder = null;
+            }
+            const orderedIndexes = Array.from(container.querySelectorAll(itemSelector))
+                .map(el => parseInt(el.dataset.idx, 10))
+                .filter(n => Number.isFinite(n));
+            dragEl = null;
+            if (typeof onReorder === 'function') onReorder(orderedIndexes);
+        });
     }
 
     const callIfFn = (fn) => { try { if (typeof fn === 'function') fn(); } catch (e) {} };
@@ -523,7 +654,7 @@
             defaultServerId: '4020',  // «Любой» (fallback, если регион не распознан)
             defaultAmount: '1',
             // Порядок = важность (лишние сверх 10 режем с конца).
-            imageTypes: ['weapons', 'agents', 'buddies'],
+            imageTypes: ['weapons', 'buddies'],
             collect() {
                 if (detectGame() !== 'valorant') throwError('Откройте страницу товара Valorant на LZT');
                 const skinCount = Math.max(0, getValorantSkinCount() | 0);
@@ -929,12 +1060,31 @@
     let rareErrorToastLastKey = '';
     let rareErrorToastLastAt = 0;
     const PRICE_SEARCH_HINT_ID = 'price-search-context';
+    const FUNPAY_EN_TRANSLIT_HINT_ID = 'funpay-en-translit';
+    // Общий стек тостов: единый fixed-контейнер (flex column-reverse) снизу экрана.
+    // Все тосты кладутся сюда и автоматически выстраиваются друг над другом без
+    // наложений — вместо прежней общей точки bottom:18px, где всё перекрывалось.
+    function ensureToastStack() {
+        let stack = document.querySelector('.rareToastStack');
+        if (!stack) {
+            stack = createNode('div', 'rareToastStack');
+            document.body.appendChild(stack);
+        }
+        return stack;
+    }
+    // Помещает тост в стек (если ещё не там). column-reverse => свежие снизу.
+    function mountToast(toast) {
+        const stack = ensureToastStack();
+        if (toast.parentNode !== stack) stack.appendChild(toast);
+        return toast;
+    }
+
     function getMainToast() {
         let toast = document.querySelector('.rareMainToast');
         if (!toast) {
             toast = createNode('div', 'rareToast rareMainToast');
             toast.innerHTML = '<span class="rareToastCheck"></span><span class="rareToastText"></span>';
-            document.body.appendChild(toast);
+            mountToast(toast);
         }
         if (!toast._rareToastCheck) toast._rareToastCheck = toast.querySelector('.rareToastCheck');
         if (!toast._rareToastText) toast._rareToastText = toast.querySelector('.rareToastText');
@@ -955,19 +1105,17 @@
         if (label) label.textContent = text;
         clearTimeout(rareToastTimer);
         if (forceReflow) { toast.classList.remove('show'); void toast.offsetWidth; }
-        // Если виден постоянный тост публикации — поднимаем этот тост точно над ним
-        // (динамически по реальной высоте: устойчиво к переносам строк и кнопке).
-        positionMainToastAbovePublish(toast);
-        toast.classList.add('show');
+        // Показ: сначала снимаем display:none (через .show), даём кадр на раскладку,
+        // затем анимируем вход. Стек сам разводит тосты — ручного bottom больше нет.
+        showToastEl(toast);
         rareToastTimer = setTimeout(() => toast.classList.remove('show'), timeout);
     }
-    // Ставит bottom главного тоста так, чтобы он был над постоянным тостом
-    // публикации (если тот показан), иначе возвращает дефолтные 18px.
-    function positionMainToastAbovePublish(mainToast) {
-        const pub = document.querySelector('.rareFpPublishToast.show');
-        if (!pub) { mainToast.style.bottom = ''; return; }
-        const h = pub.offsetHeight || 52;
-        mainToast.style.bottom = (18 + h + 12) + 'px'; // низ постоянного(18) + высота + зазор(12)
+    // Плавный показ тоста из стека: монтируем в стек и на следующем кадре
+    // включаем .show (fade/slide). Скрытые тосты position:absolute — вне потока.
+    function showToastEl(toast) {
+        mountToast(toast);
+        void toast.offsetWidth;
+        toast.classList.add('show');
     }
     function showThemeToast(text) {
         const accent = CUSTOM.accentColor || DEFAULT_CUSTOM.accentColor;
@@ -992,7 +1140,7 @@
                 + '<button type="button" class="rareFpPublishCancel" title="Отменить публикацию и очистить очередь">Отменить</button>';
             const cancelBtn = toast.querySelector('.rareFpPublishCancel');
             if (cancelBtn) cancelBtn.addEventListener('click', funpayCancelAll);
-            document.body.appendChild(toast);
+            mountToast(toast);
         }
         if (!toast._body) toast._body = toast.querySelector('.rareFpPublishBody');
         if (!toast._cancel) toast._cancel = toast.querySelector('.rareFpPublishCancel');
@@ -1008,8 +1156,7 @@
         // text===undefined => не трогаем текст (сохраняем детальный прогресс цикла).
         if (toast._body && text !== undefined) toast._body.textContent = text || 'Публикация лота…';
         else if (toast._body && !toast._body.textContent) toast._body.textContent = 'Публикация лота…';
-        toast.classList.add('show');
-        document.body.classList.add('rare-fp-publishing'); // поднимает временный тост над постоянным
+        showToastEl(toast);
     }
     function updateFunpayPublishingToast(text) {
         const toast = document.querySelector('.rareFpPublishToast');
@@ -1018,10 +1165,6 @@
     function hideFunpayPublishingToast() {
         const toast = document.querySelector('.rareFpPublishToast');
         if (toast) toast.classList.remove('show');
-        document.body.classList.remove('rare-fp-publishing');
-        // Если главный тост ещё виден — вернуть его на дефолтную позицию.
-        const main = document.querySelector('.rareMainToast');
-        if (main) main.style.bottom = '';
     }
     // Синхронизирует постоянный тост с СОСТОЯНИЕМ ОЧЕРЕДИ, а не только с локальным
     // циклом публикации. Благодаря этому тост висит на ЛЮБОЙ вкладке, где есть
@@ -1052,7 +1195,7 @@
             const settingsBtn = toast.querySelector('.rareTokenToastSettings');
             if (closeBtn) closeBtn.addEventListener('click', hidePersistentApiTokenToast);
             if (settingsBtn) settingsBtn.addEventListener('click', () => openSettings(CATEGORIES.skins));
-            document.body.appendChild(toast);
+            mountToast(toast);
         }
         if (!toast._rareHintToastBody) toast._rareHintToastBody = toast.querySelector('.rareHintToastBody');
         toast.style.setProperty('--rare-toast-accent', '#ff5c5c');
@@ -1063,7 +1206,7 @@
             + (invalidToken
                 ? 'Текущий токен недействителен или истёк: обнови токен в настройках или выключи эту функцию.'
                 : 'Добавь или обнови токен в настройках, либо выключи эту функцию.');
-        toast.classList.add('show');
+        showToastEl(toast);
     }
 
     const HINT_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 18h6"></path><path d="M10 22h4"></path><path d="M12 2a7 7 0 0 0-4 12.75c.62.45 1 1.15 1 1.92V18h6v-1.33c0-.77.38-1.47 1-1.92A7 7 0 0 0 12 2Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
@@ -1090,7 +1233,7 @@
                 toast.classList.remove('show');
                 if (typeof o.onAck === 'function') o.onAck();
             });
-            document.body.appendChild(toast);
+            mountToast(toast);
             toast._title = toast.querySelector('.rareHintToastTitle');
             toast._body = toast.querySelector('.rareHintToastBody');
         }
@@ -1115,7 +1258,7 @@
             });
         }
         clearTimeout(rareHintToastTimer);
-        toast.classList.add('show');
+        showToastEl(toast);
     }
 
     // Ценовая подсказка — теперь поверх универсального showNoticeToast.
@@ -1151,6 +1294,50 @@
             buttonHoverBg: 'linear-gradient(180deg,rgba(' + tintRgb + ',.24),rgba(' + tintRgb + ',.11)),' + baseBg,
             buttonHoverBorder: 'rgba(' + tintRgb + ',.80)'
         };
+    }
+
+    // Тематическое подтверждение (замена window.confirm), стиль берётся из панели настроек.
+    function showRareConfirm(opts) {
+        return new Promise(resolve => {
+            const o = opts || {};
+            const theme = buildRareActionTheme();
+            const overlay = createNode('div', 'rareConfirmOverlay');
+            const boxEl = createNode('div', 'rareConfirmBox');
+            boxEl.style.background = theme.surfaceBg;
+            boxEl.style.border = '1px solid ' + theme.surfaceBorder;
+            boxEl.style.boxShadow = '0 20px 50px rgba(0,0,0,.45)';
+            boxEl.innerHTML = '<p class="rareConfirmTitle"></p><p class="rareConfirmBody"></p>'
+                + '<div class="rareConfirmActions"><button type="button" class="rareConfirmBtn rareConfirmBtnGhost rareConfirmCancel"></button>'
+                + '<button type="button" class="rareConfirmBtn rareConfirmBtnDanger rareConfirmOk"></button></div>';
+            boxEl.querySelector('.rareConfirmTitle').textContent = o.title || 'Подтвердите действие';
+            boxEl.querySelector('.rareConfirmBody').textContent = o.body || '';
+            const cancelBtn = boxEl.querySelector('.rareConfirmCancel');
+            const okBtn = boxEl.querySelector('.rareConfirmOk');
+            cancelBtn.textContent = o.cancelText || 'Отмена';
+            okBtn.textContent = o.okText || 'Удалить';
+            okBtn.style.background = 'linear-gradient(180deg,#ff6b6b,#e14b4b)';
+            okBtn.style.border = '1px solid rgba(255,92,92,.7)';
+            overlay.appendChild(boxEl);
+            document.body.appendChild(overlay);
+            requestAnimationFrame(() => overlay.classList.add('show'));
+            let done = false;
+            const finish = (result) => {
+                if (done) return;
+                done = true;
+                document.removeEventListener('keydown', onKeyDown, true);
+                overlay.classList.remove('show');
+                setTimeout(() => overlay.remove(), 140);
+                resolve(result);
+            };
+            const onKeyDown = (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+                else if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+            };
+            document.addEventListener('keydown', onKeyDown, true);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(false); });
+            cancelBtn.addEventListener('click', () => finish(false));
+            okBtn.addEventListener('click', () => finish(true));
+        });
     }
 
     function applyThemeHoverMenu(menu) {
@@ -1693,6 +1880,7 @@
             .rarePricePlateValue.is-price { color:#eff2f6; }
             .rarePricePlateWarning { margin-top:4px;padding-top:8px;border-top:1px solid rgba(var(--rare-price-accent-rgb,158,133,80),.18);color:rgba(237,240,244,.72);font-size:10.5px;line-height:1.4; }
             .rarePricePlateWarningIcon { margin-right:6px;color:#ffce14;font-weight:800;letter-spacing:.04em; }
+            .rarePricePlateNoAcc { margin-top:4px;padding-top:8px;border-top:1px solid rgba(var(--rare-price-accent-rgb,158,133,80),.18);color:rgba(237,240,244,.72);font-size:10.5px;line-height:1.42; }
             .rarePricePlateErrorText { margin-top:4px;padding-top:8px;border-top:1px solid rgba(255,92,92,.28);color:#ff8a8a;font:600 13px/1.35 "Open Sans",Arial,sans-serif; }
             .rarePricePlateFoot { display:flex;align-items:center;gap:8px;padding:7px 10px;border-top:1px solid rgba(var(--rare-price-accent-rgb,158,133,80),.34);font-size:10.5px;line-height:1.3;color:rgba(237,240,244,.5);white-space:nowrap; }
             .rarePricePlateFoot.is-warn { color:#c99516; }
@@ -1799,10 +1987,13 @@
             #rareModal .rareChip { position:relative;display:flex;align-items:center;gap:9px;background:#101214;border:1px solid #24272b;border-left:3px solid var(--chip-color,#00ba78);border-radius:8px;padding:7px 11px;min-height:52px; }
             #rareModal .rareChip .dot { width:20px;height:20px;flex:0 0 auto;border-radius:50%;cursor:pointer;border:2px solid rgba(255,255,255,.25);transition:transform .12s; }
             #rareModal .rareChip .dot:hover { transform:scale(1.12); }
-            #rareModal .rareChip .rareChipGrip { flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:18px;height:22px;color:rgba(255,255,255,.4);cursor:grab;border-radius:4px;transition:color .12s ease,background .12s ease; }
-            #rareModal .rareChip .rareChipGrip:hover { color:#fff;background:rgba(255,255,255,.08); }
+            #rareModal .rareChip .rareChipGrip { flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:30px;height:36px;margin:-7px -6px;color:rgba(255,255,255,.4);cursor:grab;border-radius:6px; }
             #rareModal .rareChip .rareChipGrip:active { cursor:grabbing; }
-            #rareModal .rareChip.rareChipDragging { opacity:.5;outline:1px dashed var(--rare-accent,#00ba78); }
+            #rareModal .rareChip .rareChipNum { flex:0 0 auto;min-width:18px;text-align:center;color:rgba(255,255,255,.42);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;user-select:none; }
+            #rareModal .rareListPriorityNote { margin:-6px 0 12px;padding:8px 10px;border-left:2px solid rgba(var(--rare-accent-rgb,0,186,120),.5);background:rgba(var(--rare-accent-rgb,0,186,120),.06);border-radius:0 6px 6px 0;color:#9fb0c0;font-size:11px;line-height:1.45; }
+            #rareModal .rareChip.rareDragActive { display:none!important; }
+            #rareModal .rareList.rareDragging { display:flex!important;flex-direction:column!important;gap:8px!important; }
+            #rareModal .rareDragPlaceholder { flex:0 0 auto;border-radius:8px;border:1.5px solid rgba(var(--rare-accent-rgb,0,186,120),.6);background:rgba(var(--rare-accent-rgb,0,186,120),.1);box-sizing:border-box; }
             #rareModal .rareLevelFilter { margin:8px 0 4px;padding:9px 11px;background:#0e1013;border:1px solid #24272b;border-radius:8px;display:flex;flex-direction:column;gap:8px; }
             #rareModal .rareLevelToggle { display:inline-flex;align-items:center;gap:8px;color:#e8e8e8;font-size:12px;cursor:pointer;user-select:none; }
             #rareModal .rareLevelToggle input { width:16px;height:16px;accent-color:var(--rare-accent,#00ba78);cursor:pointer; }
@@ -1830,6 +2021,22 @@
             #rareModal .rareChip .rareEffectCheck { font-size:11px; }
             #rareModal .rareChip .dot { width:18px;height:18px; }
             #rareModal .rareEmpty { color:#5a5e63;font-size:12px;text-align:center;padding:16px; }
+            .rareConfirmOverlay { position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:2000000;opacity:0;pointer-events:none;transition:opacity .14s ease; }
+            .rareConfirmOverlay.show { opacity:1;pointer-events:auto; }
+            .rareConfirmBox { width:300px;max-width:88%;border-radius:14px;padding:18px;box-sizing:border-box;transform:translateY(6px);transition:transform .14s ease; }
+            .rareConfirmOverlay.show .rareConfirmBox { transform:translateY(0); }
+            .rareConfirmTitle { margin:0 0 6px;font-size:14px;font-weight:700;color:#fff; }
+            .rareConfirmBody { margin:0 0 16px;font-size:12.5px;line-height:1.45;color:#b9c1c9; }
+            .rareConfirmActions { display:flex;justify-content:flex-end;gap:8px; }
+            .rareConfirmBtn { font-size:12px;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;transition:filter .14s ease,transform .14s ease; }
+            .rareConfirmBtn:hover { filter:brightness(1.08); }
+            .rareConfirmBtnGhost { background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#d5d8dd; }
+            .rareConfirmBtnDanger { color:#fff; }
+            #rareModal .rareCard h4 { display:flex;align-items:center;justify-content:space-between;gap:8px; }
+            #rareModal .rareListHeadActions { display:inline-flex;align-items:center;gap:4px;margin-left:auto; }
+            #rareModal .rareIconBtn { display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;border:1px solid rgba(255,255,255,.08);background:var(--rare-modal-bg-soft,rgba(255,255,255,.03));color:#9aa0aa;cursor:pointer;transition:background .14s,border-color .14s,color .14s; }
+            #rareModal .rareIconBtn:hover { color:var(--rare-accent);border-color:rgba(var(--rare-accent-rgb),.4);background:rgba(var(--rare-accent-rgb),.1); }
+            #rareModal .rareIconBtnDanger:hover { color:#ff8080;border-color:rgba(255,92,92,.45);background:rgba(255,92,92,.1); }
             #rareModal .rareHint { margin-top:12px;display:flex;gap:8px;background:#14171a;border-radius:8px;padding:10px 12px;color:#8c8c8c;font-size:12px;line-height:1.4; }
             #rareModal .rareHint b { color:var(--rare-accent); }
             #rareModal .rarePop { position:fixed;z-index:1000000;background:#1b1e22;border:1px solid #33373d;border-radius:12px;padding:12px;box-shadow:0 16px 40px rgba(0,0,0,.55);width:212px;box-sizing:border-box; }
@@ -1857,9 +2064,10 @@
             #rareModal .rareBtnCancel { margin-left:auto; }
     `;
     const _CSS_TOAST = `
-            .rareToast { position:fixed;left:50%;bottom:18px;transform:translate(-50%,16px);display:flex;align-items:center;gap:10px;max-width:min(420px,calc(100vw - 24px));padding:12px 16px;border:1px solid rgba(var(--rare-toast-accent-rgb,63,188,135),.42);border-radius:14px;background:linear-gradient(180deg,rgba(var(--rare-toast-accent-rgb,63,188,135),.16),rgba(var(--rare-toast-accent-rgb,63,188,135),.08)),var(--rare-toast-bg,#121916);box-shadow:0 16px 36px rgba(0,0,0,.34);color:#eef3f8;font:600 13px/1.35 "Open Sans",Arial,sans-serif;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s ease,transform .18s ease,visibility .18s ease;z-index:1000002;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);overflow:hidden;isolation:isolate; }
+            .rareToastStack { position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;flex-direction:column-reverse;align-items:center;gap:10px;z-index:1000002;pointer-events:none;max-width:calc(100vw - 24px); }
+            .rareToast { position:absolute;bottom:0;display:flex;align-items:center;gap:10px;max-width:min(420px,calc(100vw - 24px));padding:12px 16px;border:1px solid rgba(var(--rare-toast-accent-rgb,63,188,135),.42);border-radius:14px;background:linear-gradient(180deg,rgba(var(--rare-toast-accent-rgb,63,188,135),.16),rgba(var(--rare-toast-accent-rgb,63,188,135),.08)),var(--rare-toast-bg,#121916);box-shadow:0 16px 36px rgba(0,0,0,.34);color:#eef3f8;font:600 13px/1.35 "Open Sans",Arial,sans-serif;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s ease,transform .18s ease,visibility .18s ease;transform:translateY(16px);z-index:1;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);overflow:hidden;isolation:isolate; }
             .rareToast.is-error { background:linear-gradient(180deg,rgba(255,92,92,.20),rgba(124,20,26,.18)),#1b0b0d;border-color:rgba(255,92,92,.48);box-shadow:0 16px 36px rgba(42,0,4,.46); }
-            .rareToast.show { opacity:1;visibility:visible;transform:translate(-50%,0); }
+            .rareToast.show { position:relative;bottom:auto;opacity:1;visibility:visible;transform:translateY(0);pointer-events:auto; }
             @keyframes rareToastShimmer { 0%{ transform:translateX(-160%) skewX(-22deg); } 100%{ transform:translateX(220%) skewX(-22deg); } }
             .rareToast::before { content:'';position:absolute;top:0;bottom:0;left:0;width:42%;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.14),rgba(255,255,255,0));pointer-events:none;z-index:0;animation:rareToastShimmer 2.4s ease-in-out infinite; }
             .rareToast > * { position:relative;z-index:1; }
@@ -1929,6 +2137,22 @@
             #rareModal .rareStatsCardLabel { color:#8f9aa6;font-size:11px;text-transform:uppercase;letter-spacing:.08em; }
             #rareModal .rareStatsCardValue { color:#fff;font-size:20px;font-weight:700; }
             #rareModal .rareStatsCardMeta { color:#b9c1c9;font-size:12px;line-height:1.45; }
+            #rareModal .rareStatsCard--skeleton { position:relative;overflow:hidden;pointer-events:none; }
+            #rareModal .rareStatsCard--skeleton .rareStatsCardLabel { opacity:.55; }
+            #rareModal .rareStatsSkelLine { position:relative;overflow:hidden;border-radius:6px;background:rgba(255,255,255,.06); }
+            #rareModal .rareStatsSkelValue { height:22px;width:62%;margin-top:2px; }
+            #rareModal .rareStatsSkelMeta { height:12px;width:88%;margin-top:8px; }
+            #rareModal .rareStatsSkelMeta.is-short { width:60%;margin-top:6px; }
+            #rareModal .rareStatsSkelLine::after { content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent 0%,rgba(var(--rare-accent-rgb,63,188,135),.18) 45%,rgba(var(--rare-accent-rgb,63,188,135),.28) 50%,rgba(var(--rare-accent-rgb,63,188,135),.18) 55%,transparent 100%);animation:rareStatsShimmer 1.25s ease-in-out infinite; }
+            #rareModal .rareStatsCard--skeleton:nth-child(2) .rareStatsSkelLine::after { animation-delay:.12s; }
+            #rareModal .rareStatsCard--skeleton:nth-child(3) .rareStatsSkelLine::after { animation-delay:.24s; }
+            @keyframes rareStatsShimmer { 0%{ transform:translateX(-100%); } 60%,100%{ transform:translateX(100%); } }
+            #rareModal .rareStatsCard--skeleton { animation:rareStatsCardPulse 1.6s ease-in-out infinite; }
+            #rareModal .rareStatsCard--skeleton:nth-child(2) { animation-delay:.1s; }
+            #rareModal .rareStatsCard--skeleton:nth-child(3) { animation-delay:.2s; }
+            @keyframes rareStatsCardPulse { 0%,100%{ border-color:rgba(255,255,255,.05); } 50%{ border-color:rgba(var(--rare-accent-rgb,63,188,135),.28); } }
+            #rareModal .rareStatsCard--enter { animation:rareStatsCardEnter .32s ease both; }
+            @keyframes rareStatsCardEnter { from{ opacity:0;transform:translateY(8px); } to{ opacity:1;transform:translateY(0); } }
             #rareModal .cstRow { display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid #22262b; }
             #rareModal .cstRow:first-of-type { border-top:none; }
             #rareModal .cstLabel { flex:1;color:#d5d8dd;font-size:13px; }
@@ -2183,6 +2407,7 @@
             .rareFpRow.is-err { border-left-color:#ff5c5c; }
             .rareFpRowHead { display:flex;align-items:center;gap:8px;font-size:11px;color:#9aa0aa;margin-bottom:4px; }
             .rareFpBadge { font-weight:800;letter-spacing:.03em;text-transform:uppercase; }
+            .rareFpCheckNote { color:#ffce14;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.02em;padding:2px 6px;border:1px solid rgba(255,206,20,.4);border-radius:5px;background:rgba(255,206,20,.1); }
             .rareFpRow.is-ok .rareFpBadge { color:#00ba78; }
             .rareFpRow.is-warn .rareFpBadge { color:#ffce14; }
             .rareFpRow.is-err .rareFpBadge { color:#ff5c5c; }
@@ -2225,8 +2450,10 @@
     const checkSvg = () => `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>`
     const plusSvg = () => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`
     const delSvg = () => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`
+    const trashSvg = () => `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>`
+    const wandSvg = () => `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>`
     // Иконка «6 точек» — ручка перетаскивания для приоритета порядка редких.
-    const gripSvg = () => `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>`
+    const gripSvg = () => `<svg viewBox="0 0 24 24" width="18.5" height="18.5" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>`
     const valorantLogoSvg = () => `<svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M19.8 26.1h-0.2c-2.4 0-4.8 0-7.2 0-0.3 0-0.5-0.1-0.6-0.3-2.5-3.2-5.1-6.3-7.6-9.5C4.1 16.1 4 16 4 15.8c0-3.1 0-6.1 0-9.2 0-0.1 0-0.2 0.1-0.2h0.1c5.2 6.5 10.4 13 15.5 19.5 0 0 0 0.1 0.1 0.1Z"/><path d="M27.8 16.3c-0.7 0.9-1.5 1.8-2.2 2.8-0.2 0.2-0.4 0.3-0.6 0.3-2.4 0-4.8 0-7.1 0 0 0-0.1 0-0.1 0-0.1 0-0.2-0.1-0.1-0.2 0 0 0-0.1 0.1-0.1 2.4-3 4.7-5.9 7.1-8.9 1-1.2 2-2.5 2.9-3.7 0-0.1 0.1-0.1 0.2-0.1 0 0 0.1 0 0.1 0 0 0.1 0 0.1 0 0.2 0 3 0 6.1 0 9.1 0 0.3-0.1 0.5-0.2 0.6Z"/></svg>`
     const fortniteLogoSvg = () => `<svg viewBox="0 0 192 192" fill="none" stroke="currentColor" stroke-width="12" stroke-linejoin="round" aria-hidden="true"><path d="M121.62 56.15H98.85v17.08l5.69 5.69h17.08v28.46H98.85v51.24l-28.47 5.69V27.69h56.93Z"/><path d="m22 33.38 8.54 28.47L22 152.92l48.39-8.08V33.38H22zm142.31 28.47L170 33.38h-43.83l-4.56 22.77H98.85v17.08l5.69 5.69h17.07v28.47H98.85v34.77l71.15 5.07-5.69-85.38z"/></svg>`
     const genshinLogoSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" fill="currentColor" aria-hidden="true"><g transform="translate(0,320) scale(0.1,-0.1)"><path d="M2639 2789 c-123 -62 -174 -211 -115 -334 45 -94 115 -137 225 -136 81 0 129 19 181 71 38 38 70 114 70 167 0 95 -57 191 -136 228 -66 31 -169 33 -225 4z"/><path d="M615 2104 c-218 -31 -417 -217 -455 -426 -7 -35 -10 -252 -8 -590 l3 -535 35 -46 c51 -67 99 -91 185 -91 76 -1 129 20 173 68 51 56 52 61 52 553 0 425 2 461 19 499 69 152 268 142 311 -15 7 -26 10 -198 10 -484 -1 -496 -2 -488 68 -560 66 -68 180 -84 270 -38 41 21 67 48 97 101 19 33 20 60 25 515 6 532 3 514 73 562 56 39 130 39 181 -1 72 -55 70 -44 76 -406 4 -271 8 -331 21 -360 9 -19 23 -50 30 -69 24 -63 105 -176 160 -222 74 -62 174 -116 250 -134 83 -19 248 -19 324 0 110 28 183 73 280 170 80 79 95 100 127 175 20 47 42 115 47 150 15 93 14 887 -1 948 -22 89 -120 162 -218 162 -95 0 -196 -71 -219 -155 -7 -26 -11 -184 -11 -461 l0 -421 -29 -39 c-34 -48 -66 -70 -114 -79 -69 -13 -143 31 -174 103 -10 24 -14 110 -17 355 -3 249 -7 334 -19 377 -30 106 -61 160 -143 242 -206 207 -555 208 -763 0 -86 -86 -104 -85 -194 6 -27 28 -61 56 -75 63 -15 7 -38 21 -52 30 -57 38 -231 66 -325 53z"/></g></svg>`
@@ -2252,8 +2479,9 @@
         return '<div class="rareItemsView" data-view="' + tab + '"' + (hidden ? ' style="display:none"' : '') + '>'
             + (subTabsHtml || '')
             + '<div class="rareCol"><div class="rareCard">'
-            + '<h4><span class="rareListTitle"></span></h4>'
+            + '<h4><span class="rareListTitle"></span><span class="rareListHeadActions"><button type="button" class="rareIconBtn rareListDefaults" title="Загрузить готовую базу" style="display:none">' + wandSvg() + '</button><button type="button" class="rareIconBtn rareIconBtnDanger rareListClear" title="Очистить список">' + trashSvg() + '</button></span></h4>'
             + '<p class="rareSubTxt rareListDesc"></p>'
+            + '<p class="rareSubTxt rareListPriorityNote">Редкие предметы показываются в том же порядке (приоритете), как вы выставили их в списке — перетаскивайте за иконку слева. Этот порядок используется и в автоназвании, и при автозагрузке лота на FunPay.</p>'
             + '<div class="rareInputRow"><input type="text" class="rareInput" placeholder="" maxlength="80"><button class="rareAddBtn" title="Добавить">+</button></div>'
             + '<div class="rareLevelFilter" style="display:none">'
             +   '<label class="rareLevelToggle"><input type="checkbox" class="rareLevelEnabled"><span>Минимальный уровень</span></label>'
@@ -2441,15 +2669,9 @@
                 chip.dataset.idx = String(i);
 
                 // Ручка перетаскивания (6 точек): приоритет порядка редких.
+                // Сам DnD с живым предпросмотром обрабатывает enableDragReorder() на контейнере списка.
                 const grip = Object.assign(createNode('span', 'rareChipGrip'), { title: 'Перетащите для приоритета (выше = первее)', innerHTML: gripSvg() });
                 grip.setAttribute('draggable', 'true');
-                grip.addEventListener('dragstart', e => {
-                    chip.classList.add('rareChipDragging');
-                    e.dataTransfer.effectAllowed = 'move';
-                    try { e.dataTransfer.setData('text/plain', String(i)); } catch (err) {}
-                    try { e.dataTransfer.setDragImage(chip, 10, 10); } catch (err) {}
-                });
-                grip.addEventListener('dragend', () => { chip.classList.remove('rareChipDragging'); });
 
                 const dot = Object.assign(createNode('span', 'dot'), { title: 'Выбрать цвет' });
                 dot.style.background = item.color;
@@ -2480,34 +2702,17 @@
                 const del = Object.assign(createNode('button', 'del'), { title: 'Удалить', innerHTML: delSvg() });
                 del.addEventListener('click', () => { draft().items.splice(i, 1); renderList(); });
 
-                [grip, dot, createNode('span', 'name', item.name), checks, del].forEach(el => chip.appendChild(el));
-
-                // DnD-мишень: определяем позицию сброса относительно середины чипа.
-                chip.addEventListener('dragover', e => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                });
-                chip.addEventListener('drop', e => {
-                    e.preventDefault();
-                    let from = -1;
-                    try { from = parseInt(e.dataTransfer.getData('text/plain'), 10); } catch (err) {}
-                    const dragging = list.querySelector('.rareChipDragging');
-                    if (!Number.isFinite(from) && dragging) from = parseInt(dragging.dataset.idx, 10);
-                    const to = parseInt(chip.dataset.idx, 10);
-                    reorderItems(from, to);
-                });
+                const num = createNode('span', 'rareChipNum', String(i + 1));
+                [grip, num, dot, createNode('span', 'name', item.name), checks, del].forEach(el => chip.appendChild(el));
 
                 list.appendChild(chip);
             });
-        }
-
-        // Перестановка редких в списке (приоритет показа/названий/FP берут порядок).
-        function reorderItems(from, to) {
-            const arr = draft().items;
-            if (!Number.isFinite(from) || !Number.isFinite(to) || from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return;
-            const [moved] = arr.splice(from, 1);
-            arr.splice(to, 0, moved);
-            renderList();
+            // Переиспользуемый DnD-хелпер: живой предпросмотр перестановки (FLIP), тянуть за ручку.
+            enableDragReorder(list, '.rareChip', '.rareChipGrip', (orderedIndexes) => {
+                const arr = draft().items;
+                draft().items = orderedIndexes.map(idx => arr[idx]);
+                renderList();
+            });
         }
 
         function addItem() {
@@ -2558,6 +2763,43 @@
             view.querySelector('.rareListTitle').textContent = c.listTitle;
             view.querySelector('.rareListDesc').textContent = c.listDesc;
             view.querySelector('.rareInput').placeholder = c.inputPlaceholder;
+            const key = curKey();
+            const hasDefaults = key === 'skins' || key === 'buddies' || key === 'fortnite';
+            const defaultsBtn = view.querySelector('.rareListDefaults');
+            if (defaultsBtn) defaultsBtn.style.display = hasDefaults ? '' : 'none';
+            if (!view._listActionsBound) {
+                view._listActionsBound = true;
+                const clearBtn = view.querySelector('.rareListClear');
+                if (clearBtn) clearBtn.addEventListener('click', async () => {
+                    if (!draft().items.length) return;
+                    const ok = await showRareConfirm({
+                        title: 'Очистить список?',
+                        body: 'Все предметы из текущего списка (' + draft().items.length + ') будут удалены.',
+                        okText: 'Очистить',
+                        cancelText: 'Отмена'
+                    });
+                    if (!ok) return;
+                    draft().items = [];
+                    renderList();
+                });
+                if (defaultsBtn) defaultsBtn.addEventListener('click', () => {
+                    const c2 = cat();
+                    const existing = draft().items;
+                    const existingNames = new Set(existing.map(x => x.name.toLowerCase()));
+                    const toAdd = c2.defaultWanted
+                        .filter(x => !existingNames.has(String(x.name || '').toLowerCase()))
+                        .map(x => ({
+                            name: x.name,
+                            color: x.color || c2.defaultColor,
+                            effect: x.effect || 'none',
+                            minPower: Math.max(0, parseInt(x.minPower, 10) || 0),
+                            minTrophies: Math.max(0, parseInt(x.minTrophies, 10) || 0),
+                            minRank: Math.max(0, parseInt(x.minRank, 10) || 0)
+                        }));
+                    draft().items = existing.concat(toAdd);
+                    renderList();
+                });
+            }
             renderList();
         }
 
@@ -2687,8 +2929,10 @@
                     it.lztUrl ? linkBtn(it.lztUrl, 'LZT', 'is-lzt') : ''
                 ].filter(Boolean).join('');
                 const game = FUNPAY_ADAPTERS[it.gameKey] ? FUNPAY_ADAPTERS[it.gameKey].label : (it.gameKey || '');
+                const checkNote = it.checkTitle ? '<span class="rareFpCheckNote">проверьте англ. название</span>' : '';
                 return '<div class="rareFpRow ' + cls + '">'
                     + '<div class="rareFpRowHead"><span class="rareFpBadge">' + escHtml(statusLabel[it.status] || it.status || '') + '</span>'
+                    + checkNote
                     + '<span class="rareFpDate">' + escHtml(formatTimeLabel(it.at)) + '</span>'
                     + '<span class="rareFpGame">' + escHtml(game) + '</span></div>'
                     + '<div class="rareFpTitle">' + escHtml(it.title || '—') + '</div>'
@@ -2716,13 +2960,17 @@
         const _statsLabels = { day: 'день', week: '7 дней', month: 'месяц' };
         function renderStatsCards(grid, stats) {
             grid.innerHTML = '';
+            let idx = 0;
             ['day', 'week', 'month'].forEach(key => {
                 const item = stats[key]; if (!item) return;
-                grid.appendChild(Object.assign(createNode('div', 'rareStatsCard'), { innerHTML:
+                const card = Object.assign(createNode('div', 'rareStatsCard rareStatsCard--enter'), { innerHTML:
                     '<div class="rareStatsCardLabel">Прибыль за ' + (_statsLabels[key] || key) + '</div>'
                     + '<div class="rareStatsCardValue">' + formatMoney(item.profit) + '</div>'
                     + '<div class="rareStatsCardMeta">Продажи: ' + formatMoney(item.soldTotal) + ' (' + item.salesCount + ')<br>Покупки: ' + formatMoney(item.paidTotal) + ' (' + item.buysCount + ')</div>'
-                }));
+                });
+                card.style.animationDelay = (idx * 0.08) + 's';
+                idx++;
+                grid.appendChild(card);
             });
         }
         const renderStatsUpdated = savedAt => { const el = box.querySelector('.rareStatsUpdated'); if (el) el.textContent = savedAt ? 'Обновлено: ' + formatTimeLabel(savedAt) : ''; };
@@ -2746,7 +2994,15 @@
             }
             const reqId = ++statsReqId;
             renderStatsUpdated(cache ? cache.savedAt : 0);
-            grid.innerHTML = '<div class="rareStatsCard"><div class="rareStatsCardLabel">Статистика</div><div class="rareStatsCardMeta">Загрузка...</div></div>';
+            // Три skeleton-карточки с shimmer — по числу блоков статистики (день/7 дней/месяц).
+            grid.innerHTML = ['день', '7 дней', 'месяц'].map(lbl =>
+                '<div class="rareStatsCard rareStatsCard--skeleton">'
+                + '<div class="rareStatsCardLabel">Прибыль за ' + lbl + '</div>'
+                + '<div class="rareStatsSkelLine rareStatsSkelValue"></div>'
+                + '<div class="rareStatsSkelLine rareStatsSkelMeta"></div>'
+                + '<div class="rareStatsSkelLine rareStatsSkelMeta is-short"></div>'
+                + '</div>'
+            ).join('');
             try {
                 const stats = await fetchProfitStats();
                 if (reqId !== statsReqId) return;
@@ -3159,10 +3415,31 @@
     function orderNamesByWanted(names, cat) {
         const wanted = (cat && Array.isArray(cat.wanted)) ? cat.wanted : [];
         const priority = new Map();
-        wanted.forEach((w, i) => { const k = norm(w && w.name); if (k && !priority.has(k)) priority.set(k, i); });
-        const rank = n => { const p = priority.get(norm(cleanAutoTitleSkinName(n))); return p == null ? Number.MAX_SAFE_INTEGER : p; };
+        // Та же нормализация, что и в matchWanted, иначе кавычки/дефисы ломают сопоставление.
+        wanted.forEach((w, i) => { const k = normalizeWantedText(w && w.name); if (k && !priority.has(k)) priority.set(k, i); });
+        const rank = n => { const p = priority.get(normalizeWantedText(n)); return p == null ? Number.MAX_SAFE_INTEGER : p; };
         // Стабильная сортировка по приоритету wanted.
         return names.map((n, i) => ({ n, i })).sort((a, b) => (rank(a.n) - rank(b.n)) || (a.i - b.i)).map(x => x.n);
+    }
+
+    // Переиспользуемая сортировка массива ЛЮБЫХ объектов-совпадений по приоритету
+    // wanted-списка (тот порядок, что пользователь задал перетаскиванием в настройках).
+    // getName(item) должен вернуть имя предмета для сопоставления с cat.wanted.
+    // Стабильна: элементы с одинаковым рангом сохраняют исходный (DOM) порядок,
+    // ненайденные в wanted — уходят в конец. Используется всеми панелями редких.
+    function orderMatchesByWanted(matches, cat, getName) {
+        const wanted = (cat && Array.isArray(cat.wanted)) ? cat.wanted : [];
+        const priority = new Map();
+        // ВАЖНО: та же нормализация, что и в matchWanted (normalizeWantedText),
+        // иначе ключи не совпадут (кавычки/дефисы) и приоритет не сработает.
+        wanted.forEach((w, i) => { const k = normalizeWantedText(w && w.name); if (k && !priority.has(k)) priority.set(k, i); });
+        const rank = (item) => {
+            const p = priority.get(normalizeWantedText(getName(item) || ''));
+            return p == null ? Number.MAX_SAFE_INTEGER : p;
+        };
+        return (matches || []).map((m, i) => ({ m, i }))
+            .sort((a, b) => (rank(a.m) - rank(b.m)) || (a.i - b.i))
+            .map(x => x.m);
     }
 
     function getAutoTitleRareSkinNames() {
@@ -3527,6 +3804,7 @@
 
     function applyPublishedAgeCache() {
         if (!publishedAgeEnabled()) { clearPublishedAgeBadges(); return; }
+        if (isMarketRootPage()) { clearPublishedAgeBadges(); return; } // не на главной
         const cache = loadPublishedAgeCache();
         document.querySelectorAll('.marketIndexItem[id^="marketItem--"]').forEach(item => {
             const id = getMarketIndexItemId(item);
@@ -3536,6 +3814,7 @@
 
     function queuePublishedAgeUpdate() {
         if (!publishedAgeEnabled()) { stopPublishedAgeWatcher(); return; }
+        if (isMarketRootPage()) { stopPublishedAgeWatcher(); return; } // не на главной
         applyPublishedAgeCache();
         if (!hasApiToken()) return;
         clearTimeout(publishedAgeTimer);
@@ -3557,6 +3836,7 @@
 
     function ensurePublishedAgeWatcher() {
         if (!publishedAgeEnabled()) { stopPublishedAgeWatcher(); return; }
+        if (isMarketRootPage()) { stopPublishedAgeWatcher(); return; } // не на главной
         if (publishedAgeObserver || !document.body) return;
         publishedAgeObserver = new MutationObserver(records => {
             if (records.some(record => Array.from(record.addedNodes).some(node => node && node.nodeType === 1 && (node.matches && node.matches('.marketIndexItem[id^="marketItem--"]') || node.querySelector && node.querySelector('.marketIndexItem[id^="marketItem--"]'))))) {
@@ -3575,6 +3855,12 @@
         if (!/^[a-z0-9_-]+$/.test(category)) return '';
         if (/^\d+$/.test(category) || category === 'user' || category === 'account' || category === 'cart') return '';
         return '/' + category;
+    }
+
+    // Главная страница маркета (корень lzt.market/) — там товары разных категорий
+    // вперемешку. Дни с публикации показываем ТОЛЬКО в категориях, не на корне.
+    function isMarketRootPage() {
+        return location.pathname.split('/').filter(Boolean).length === 0;
     }
 
     function getLocationQueryObject() {
@@ -3608,6 +3894,7 @@
 
     async function fetchMissingPublishedAges() {
         if (!publishedAgeEnabled()) return;
+        if (isMarketRootPage()) return; // на главной дни с публикации не показываем
         if (!hasApiToken()) {
             showPersistentApiTokenToast('Показ дней с публикации', false);
             return;
@@ -3800,6 +4087,37 @@
         return Number.isFinite(value) && value > 0 ? value : 0;
     }
 
+    // Оригинальная (Steam) стоимость ТОЛЬКО CS2-инвентаря — сумма цен по каждому
+    // CS2-предмету (app_id=730), а не общий тотал страницы. Нужно, т.к. страница
+    // steam-value может показывать несколько игр: тогда .LztSvResult--totalValue
+    // включает чужие игры, и процент (числитель=только CS2) считался бы от неверной базы.
+    // data-value предмета = его оригинальная стоимость (в тех же единицах, что тотал).
+    function getSteamValueCs2OriginalTotal(root) {
+        const scope = root || document;
+        let sum = 0;
+        let counted = 0;
+        scope.querySelectorAll('.lztSv--item').forEach(item => {
+            const link = item.querySelector('.lztSv_link--item-new[href*="/market/listings/"]');
+            const href = link && link.href ? link.href : '';
+            const appIdMatch = href.match(/\/market\/listings\/(\d+)\//i);
+            // Только CS2. Если ссылки нет — не можем подтвердить принадлежность, пропускаем.
+            if (!appIdMatch || appIdMatch[1] !== '730') return;
+            // Оригинальная цена предмета: data-value в блоке цены (исключаем нашу вставку).
+            const priceNode = item.querySelector('.lztSv--item--price--new .Value[data-value], .Value.mainc[data-value]');
+            const value = Number(priceNode && priceNode.getAttribute('data-value'));
+            if (Number.isFinite(value) && value > 0) { sum += value; counted++; }
+        });
+        return counted ? sum : 0;
+    }
+
+    // База для процента: если удалось просуммировать оригинальную стоимость CS2-предметов
+    // — используем её (корректно при мульти-игровом инвентаре). Иначе fallback на общий
+    // тотал страницы (когда сама страница уже отфильтрована по app_id=730).
+    function getSteamValueCs2Base(root) {
+        const cs2 = getSteamValueCs2OriginalTotal(root);
+        return cs2 > 0 ? cs2 : getSteamValueOriginalTotal(root);
+    }
+
     function formatSteamValueDeltaText(originalTotal, marketTotal) {
         if (!Number.isFinite(originalTotal) || originalTotal <= 0 || !Number.isFinite(marketTotal)) return '';
         const delta = ((marketTotal - originalTotal) / originalTotal) * 100;
@@ -3869,7 +4187,7 @@
             found += entry.qty;
         });
         const totalItems = entries.reduce((sum, entry) => sum + entry.qty, 0);
-        return total > 0 ? { total, found, totalItems, deltaText: formatSteamValueDeltaText(getSteamValueOriginalTotal(doc), total) } : null;
+        return total > 0 ? { total, found, totalItems, deltaText: formatSteamValueDeltaText(getSteamValueCs2Base(doc), total) } : null;
     }
 
     async function buildSteamItemPageInventoryMarketPrice() {
@@ -4027,7 +4345,7 @@
             renderSteamValueItemPrices(prices);
             extra.classList.remove('muted');
             const totalItems = availableEntries.reduce((sum, entry) => sum + entry.qty, 0);
-            const deltaText = formatSteamValueDeltaText(getSteamValueOriginalTotal(), total);
+            const deltaText = formatSteamValueDeltaText(getSteamValueCs2Base(), total);
             extra.innerHTML = '<div class="Value mainc">' + escHtml(formatMarketCsgoMoney(total) + ' (' + found + '/' + totalItems + ')') + '<span class="rareSteamValueExtraIcon">' + marketCsgoSvg() + '</span><button type="button" class="rareSteamValueExtraRefresh" title="Перепарсить цены" aria-label="Перепарсить цены">' + refreshSvg() + '</button></div>' + (deltaText ? '<div class="rareSteamValueExtraDelta">' + escHtml(deltaText) + '</div>' : '');
             bindSteamValueExtraActions(extra);
         } catch (e) {
@@ -4447,6 +4765,12 @@
             warn.innerHTML = '<span class="rarePricePlateWarningIcon">[!]</span>' + escHtml(daybreakWarning);
             body.appendChild(warn);
         }
+        // Аккаунтов на маркете не нашлось: цена неизвестна. Предлагаем понизить отлегу.
+        if (!stats.count) {
+            const noAcc = createNode('div', 'rarePricePlateNoAcc');
+            noAcc.appendChild(createNode('span', '', 'Аккаунтов с такими параметрами на маркете не найдено — цену определить не удалось. Понизьте отлегу на маркете, чтобы узнать примерную цену. Воспользуйтесь кнопкой внешней ссылки ниже.'));
+            body.appendChild(noAcc);
+        }
         if (saved.errorText) body.appendChild(createNode('div', 'rarePricePlateErrorText', saved.errorText));
         plate.appendChild(body);
 
@@ -4859,7 +5183,7 @@
     function buildValorantCombined() {
         const skinsUl = document.querySelector('ul[data-key="' + CATEGORIES.skins.key + '"]');
         const buddiesUl = document.querySelector('ul[data-key="' + CATEGORIES.buddies.key + '"]');
-        const lolMatches = collectRiotLolCardMatches(CATEGORIES.lol);
+        const lolMatches = orderMatchesByWanted(collectRiotLolCardMatches(CATEGORIES.lol), CATEGORIES.lol, m => m.name);
         if (!skinsUl && !buddiesUl && !lolMatches.length) return;
 
         const anchorUl = skinsUl || buddiesUl || findLolSkinLists()[0];
@@ -4875,8 +5199,8 @@
         findLolSkinLists().forEach(ul => ul.querySelectorAll('li.item').forEach(li => attachSourceAddButton(li, CATEGORIES.lol, li2 => cleanAutoTitleSkinName(getItemName(li2)))));
 
         const valMatches = [];
-        if (skinsUl) valMatches.push.apply(valMatches, collectMatchesFromList(skinsUl, CATEGORIES.skins));
-        if (buddiesUl) valMatches.push.apply(valMatches, collectMatchesFromList(buddiesUl, CATEGORIES.buddies));
+        if (skinsUl) valMatches.push.apply(valMatches, orderMatchesByWanted(collectMatchesFromList(skinsUl, CATEGORIES.skins), CATEGORIES.skins, m => getItemName(m.li)));
+        if (buddiesUl) valMatches.push.apply(valMatches, orderMatchesByWanted(collectMatchesFromList(buddiesUl, CATEGORIES.buddies), CATEGORIES.buddies, m => getItemName(m.li)));
         const total = valMatches.length + lolMatches.length;
 
         const { panel } = ensurePanel({
@@ -5105,10 +5429,10 @@
         const anchorUl = lists[0];
         const scrollWrapper = resolveScrollWrapper(anchorUl);
 
-        const matches = collectWantedMatches(lists, cat, 'li.item', (li, ul) => ({
+        const matches = orderMatchesByWanted(collectWantedMatches(lists, cat, 'li.item', (li, ul) => ({
             name: getItemName(li).trim(),
             extra: { id: li.getAttribute('data-id') || '', dataKey: ul.getAttribute('data-key') || '' }
-        }));
+        })), cat, m => m.name);
 
         const { panel } = ensurePanel({
             panelId: 'rareFortnitePanel',
@@ -5208,6 +5532,8 @@
             }
         });
         const total = groups.reduce((sum, g) => sum + g.items.length, 0);
+        // Порядок карточек = приоритет wanted-списка (перетаскивание в настройках).
+        groups.forEach(g => { g.items = orderMatchesByWanted(g.items, g.cat, m => m.name); });
 
         const insertParent = (header && header.parentNode) ? header.parentNode : scrollWrapper.parentNode;
         const insertBefore = (header && header.parentNode) ? header.nextSibling : scrollWrapper;
@@ -5381,7 +5707,7 @@
         lists.forEach(ul => ul.querySelectorAll('li.supercellBrawler, li.item').forEach(li => attachSourceAddButton(li, cat, li2 =>
             (li2.querySelector('.gameTitle') && li2.querySelector('.gameTitle').textContent
              || li2.querySelector('img[alt]') && li2.querySelector('img[alt]').getAttribute('alt') || ''))));
-        const matches = collectBrawlMatches(cat, lists);
+        const matches = orderMatchesByWanted(collectBrawlMatches(cat, lists), cat, m => m.name);
 
         const { panel } = ensurePanel({
             panelId: 'rareBrawlPanel',
@@ -5508,8 +5834,8 @@
             const img = node.querySelector('img.medalImg, img[alt]');
             return (img && (img.getAttribute('alt') || img.getAttribute('data-cachedtitle'))) || '';
         }));
-        const matches = collectSteamGameMatches(cat, lists);
-        const medalMatches = collectSteamMedalMatches(CATEGORIES.steammedals);
+        const matches = orderMatchesByWanted(collectSteamGameMatches(cat, lists), cat, m => m.name);
+        const medalMatches = orderMatchesByWanted(collectSteamMedalMatches(CATEGORIES.steammedals), CATEGORIES.steammedals, m => m.name);
         const total = matches.length + medalMatches.length;
 
         const { panel } = ensurePanel({
@@ -5664,7 +5990,8 @@
 
         const box = panel.querySelector('.rareCollections');
         box.innerHTML = '';
-        order.forEach(g => box.appendChild(renderCollection(cat, g)));
+        // Группы (по wanted-имени) — в порядке приоритета wanted-списка.
+        orderMatchesByWanted(order, cat, g => g.name).forEach(g => box.appendChild(renderCollection(cat, g)));
 
         finalizePanel(panel, box, total,
             countLabel(total, pluralRareSkins),
@@ -5787,9 +6114,19 @@
         floatingButtonWatchersReady = true;
         window.addEventListener('resize', scheduleFloatingButtonPosition, { passive: true });
         window.addEventListener('scroll', scheduleFloatingButtonPosition, { passive: true });
-        setTimeout(scheduleFloatingButtonPosition, 300);
-        setTimeout(scheduleFloatingButtonPosition, 1200);
-        setTimeout(scheduleFloatingButtonPosition, 2500);
+        // Якорь-чат появляется не сразу после загрузки страницы. Вместо редких
+        // отложенных таймеров (300/1200/2500 мс — из-за них кнопка «прыгала» на месте
+        // через ~0.3 c) быстро опрашиваем позицию по кадрам, пока якорь не найдётся,
+        // но не дольше ~3 с — так кнопка встаёт правильно практически мгновенно.
+        let tries = 0;
+        const maxTries = 60; // ~3 c при шаге 50 мс
+        const tick = () => {
+            positionFloatingButton();
+            tries++;
+            if (findFloatingButtonAnchor() || tries >= maxTries) return;
+            setTimeout(tick, 50);
+        };
+        requestAnimationFrame(tick);
     }
 
     function positionFloatingButton() {
@@ -5962,6 +6299,33 @@
     // Максимум символов в названии лота на FunPay.
     const FUNPAY_TITLE_MAX = 100;
 
+    // Названия скинов Valorant на LZT полностью на русском (напр. «КЛИНОК УСКОРЕНИЕ»),
+    // а FunPay в англоязычном описании запрещает кириллицу. Полноценный перевод в
+    // официальные английские названия невозможен без огромного словаря коллекций,
+    // поэтому делаем ТРАНСЛИТЕРАЦИЮ (RU -> латиница): редкие имена сохраняются в EN-лоте
+    // читаемой латиницей, но требуют ручной проверки/корректировки продавцом.
+    const RU_TRANSLIT_MAP = {
+        'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i',
+        'й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t',
+        'у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y',
+        'ь':'','э':'e','ю':'yu','я':'ya'
+    };
+    function transliterateRu(str) {
+        let out = '';
+        for (const ch of String(str || '')) {
+            const lower = ch.toLowerCase();
+            const mapped = RU_TRANSLIT_MAP[lower];
+            if (mapped == null) { out += ch; continue; } // не кириллица — как есть
+            // Сохраняем регистр: заглавная кириллица -> заглавная первая буква латиницы.
+            out += (ch !== lower && mapped) ? (mapped.charAt(0).toUpperCase() + mapped.slice(1)) : mapped;
+        }
+        return out;
+    }
+    // Транслитерирует массив имён редких для EN-лота (кириллица -> латиница).
+    function translateRareNamesForEn(rareNames) {
+        return (rareNames || []).map(transliterateRu);
+    }
+
     // Подстановки: {count} (число + слово: RU «скинов» со склонением / EN «skins»),
     // {rare} (редкие предметы). lang: 'ru' | 'en'.
     // rareNames — массив имён (переопределяется при подгонке длины).
@@ -5970,14 +6334,16 @@
     function renderFunpayTemplate(tpl, ctx, lang, rareNames) {
         const count = ctx.count != null ? ctx.count : 0;
         const word = lang === 'en' ? 'skins' : pluralSkins(count);
+        // Для английского лота переводим русские названия редких скинов.
+        const names = lang === 'en' ? translateRareNamesForEn(rareNames) : (rareNames || []);
         const map = {
             count: ctx.count != null ? (count + ' ' + word) : '',
-            rare: (rareNames || []).join(', ')
+            rare: names.join(', ')
         };
         // Плейсхолдеры от адаптера (не перетирают уже заданные пустыми базовые).
         const adapter = ctx.adapter;
         if (adapter && typeof adapter.templatePlaceholders === 'function') {
-            const extra = adapter.templatePlaceholders(ctx, lang, rareNames) || {};
+            const extra = adapter.templatePlaceholders(ctx, lang, names) || {};
             Object.keys(extra).forEach(k => { map[k] = extra[k]; });
         }
         // Заменяем любые {key}, для которых есть значение в map (иначе пусто).
@@ -6074,17 +6440,25 @@
 
     // Авторизация FunPay идёт cookie golden_key, которую мы ставим руками. ВАЖНО:
     // запросы шлём БЕЗ anonymous — иначе Tampermonkey вырезает кастомный заголовок
-    // Cookie, и FunPay отвечает 403 «Необходимо авторизоваться». Т.к. пользователь
-    // не залогинен в FunPay в браузере, посторонних cookie нет — конфликта не будет.
+    // Cookie, и FunPay отвечает 403 «Необходимо авторизоваться».
     const FUNPAY_ANON = false;
 
     function funpayHeaders(extra) {
-        // Всегда берём АКТУАЛЬНЫЙ ключ из хранилища (а не из памяти вкладки): если
-        // ключ поменяли в другой вкладке/настройках — используется свежий.
-        const goldenKey = String((loadFunpayUploader().goldenKey) || FUNPAY.goldenKey || '').trim();
+        // Всегда берём АКТУАЛЬНЫЙ ключ строго из хранилища (не из памяти вкладки и
+        // без fallback на старую in-memory FUNPAY): если ключ поменяли — используется
+        // именно новый. Fallback на FUNPAY раньше маскировал смену ключа старым значением.
+        const goldenKey = String(loadFunpayUploader().goldenKey || '').trim();
         if (!goldenKey) throwError('Не указан golden_key FunPay (вкладка Uploader)');
         FP_LOG('funpayHeaders golden_key used:', maskGoldenKey(goldenKey));
-        return Object.assign({ 'Cookie': 'golden_key=' + goldenKey, 'User-Agent': FUNPAY_UA }, extra || {});
+        // ВАЖНО (фикс смены аккаунта): FunPay на первый запрос отдаёт Set-Cookie
+        // PHPSESSID и ПРИВЯЗЫВАЕТ серверную сессию к аккаунту. При anonymous:false
+        // этот PHPSESSID оседает в общем cookie jar браузера и АВТОМАТИЧЕСКИ
+        // дописывается ко всем следующим запросам. Тогда даже с новым golden_key
+        // сервер определяет старый аккаунт по залипшему PHPSESSID — лот уходит не туда.
+        // Затираем PHPSESSID пустым значением в нашем Cookie: заставляем FunPay
+        // выдать новую сессию именно под актуальный golden_key.
+        const cookie = 'PHPSESSID=; golden_key=' + goldenKey;
+        return Object.assign({ 'Cookie': cookie, 'User-Agent': FUNPAY_UA }, extra || {});
     }
 
     // Загружает страницу offerEdit и достаёт свежий csrf_token + form_created_at.
@@ -6720,7 +7094,10 @@
                         title: res.title,
                         funpayUrl: res.funpayUrl,
                         lztUrl: res.lztUrl || job.lztUrl,
-                        message: res.warning || ''
+                        message: res.warning || '',
+                        // Пометка «проверьте англ. название» — только если EN-название реально
+                        // содержит транслит кириллических редких (та же логика, что у тоста).
+                        checkTitle: shouldWarnFunpayTranslit(job.gameKey, job.data)
                     });
                     showThemeToast(res.warning ? ('FunPay: опубликовано с предупреждением') : ('FunPay: лот опубликован'));
                 } catch (e) {
@@ -6809,7 +7186,31 @@
         catch (e) { showNoticeToast({ key: 'funpay-error', isError: true, title: 'FunPay', body: formatErrorText(e, 'Не удалось собрать данные LZT') }); return; }
         funpayEnqueue({ gameKey: game, lztUrl, itemId: getLztItemId(), data });
         showThemeToast('Добавлено в очередь публикации FunPay');
+        // Valorant: уведомление о транслите EN-названий показываем ТОЛЬКО если реально
+        // используется список редких {rare} в EN-шаблоне И среди найденных редких есть
+        // кириллица (иначе транслитерировать нечего и предупреждать не о чем).
+        if (game === 'valorant' && shouldWarnFunpayTranslit(game, data) && !isHintDismissed(FUNPAY_EN_TRANSLIT_HINT_ID)) {
+            showNoticeToast({
+                key: FUNPAY_EN_TRANSLIT_HINT_ID,
+                title: 'FunPay',
+                body: 'Английские названия редких скинов Valorant вставлены транслитом (латиницей) — FunPay не принимает кириллицу. Проверьте и при необходимости поправьте английское название лота вручную.',
+                onAck: () => dismissHint(FUNPAY_EN_TRANSLIT_HINT_ID)
+            });
+        }
         updateFunpayButtons();
+    }
+
+    // Нужно ли предупреждать о транслите EN-названий: (1) в EN-шаблоне названия или
+    // описания есть плейсхолдер {rare}; (2) реально найдены редкие; (3) среди их имён
+    // есть кириллица (только её транслитерируем). Иначе предупреждать не о чем.
+    function shouldWarnFunpayTranslit(game, data) {
+        const rareNames = (data && data.rareNames) || [];
+        if (!rareNames.length) return false;
+        const hasCyrillic = rareNames.some(n => /[а-яё]/i.test(String(n || '')));
+        if (!hasCyrillic) return false;
+        const catCfg = (loadFunpayUploader().categories || {})[game] || {};
+        const enTemplates = [catCfg.summaryEn, catCfg.descEn, FUNPAY_DEFAULT_TITLE];
+        return enTemplates.some(t => /\{rare\}/.test(String(t || '')));
     }
 
 
