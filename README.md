@@ -25,10 +25,17 @@ Userscript для удобной работы с [LZT Market](https://lzt.market
 ## Что умеет
 
 **Поиск редких предметов.** Скрипт находит нужные предметы на странице аккаунта и выводит их отдельным красивым блоком. Поддерживаются Valorant, Fortnite, League of Legends, Steam, CS2-медали, Genshin Impact, Honkai: Star Rail, Zenless Zone Zero, World of Tanks, Rainbow Six Siege и Brawl Stars. Порядок предметов в настройках задаётся перетаскиванием. Чем выше предмет в списке, тем выше он будет показан в блоке, автоназвании и FunPay-лоте. Для каждого редкого предмета можно задать цвет и эффект: обычный, glow, fire или shimmer. Эффекты применяются и к карточкам, и к бейджам активности.
-<img width="767" height="366" alt="image" src="https://github.com/user-attachments/assets/2251c39a-a816-46f6-8cf4-3e81517a47bb" />
+
+<img width="846" height="404" alt="image (33)" src="https://github.com/user-attachments/assets/b0f1a303-a59d-4941-bb36-37a1a7e206dd" />
+
+
 
 
 **Автоназвание.** Скрипт может собрать название лота из количества предметов и найденных редких. Например: `154 skins / GALAXY, IKONIK, BLACK KNIGHT`. Название автоматически урезается под лимит LZT. Учитывается также приоритет первых редких выбранный вами.
+
+<img width="101" height="43" alt="image" src="https://github.com/user-attachments/assets/ca890156-8bb4-41b5-a720-13b407cdb542" />
+<img width="599" height="73" alt="image" src="https://github.com/user-attachments/assets/f6aa0b09-b011-4372-a405-8828a32a0ca1" />
+
 
 **Дни активности.** На странице товара рядом с последней активностью добавляется понятный бейдж с количеством дней. Цвет зависит от настроенных диапазонов.
 
