@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MARKET ENHANCER
 // @namespace    lzt.market.rare-skins
-// @version      1.2
+// @version      1.2.1
 // @description  rare shit 
 // @match        https://lzt.market/*
 // @match        https://lolz.team/*
@@ -1166,6 +1166,46 @@
         const toast = document.querySelector('.rareFpPublishToast');
         if (toast) toast.classList.remove('show');
     }
+
+    // Тост процесса подсчёта «дней с публикации» (тот же паттерн, что FunPay-тост
+    // публикации): показывается пока идёт запрос к API категории, скрывается по
+    // готовности. При ошибке — красный тост с краткой причиной (не висит вечно).
+    function getPublishedAgeProgressToast() {
+        let toast = document.querySelector('.rarePublishedAgeToast');
+        if (!toast) {
+            toast = createNode('div', 'rareToast rarePublishedAgeToast');
+            toast.innerHTML = '<span class="rareFpSpinner"></span><span class="rareFpPublishText"><span class="rareFpPublishTitle">Дни с публикации</span><span class="rareFpPublishBody"></span></span>';
+            mountToast(toast);
+            toast._body = toast.querySelector('.rareFpPublishBody');
+        }
+        return toast;
+    }
+    function showPublishedAgeProgressToast(text) {
+        const accent = CUSTOM.accentColor || DEFAULT_CUSTOM.accentColor;
+        const toast = getPublishedAgeProgressToast();
+        toast.classList.remove('is-error');
+        toast.style.setProperty('--rare-toast-accent', accent);
+        toast.style.setProperty('--rare-toast-accent-rgb', hexToRgbList(accent));
+        toast.style.setProperty('--rare-toast-bg', CUSTOM.modalBg || DEFAULT_CUSTOM.modalBg);
+        if (toast._body) toast._body.textContent = text || 'Считаю дни с публикации…';
+        showToastEl(toast);
+    }
+    function hidePublishedAgeProgressToast() {
+        const toast = document.querySelector('.rarePublishedAgeToast');
+        if (toast) toast.classList.remove('show');
+    }
+    // Ошибка показывается коротким тостом (не постоянным) с причиной и сама скрывается.
+    function showPublishedAgeErrorToast(reason) {
+        const toast = getPublishedAgeProgressToast();
+        toast.classList.add('is-error');
+        toast.style.setProperty('--rare-toast-accent', '#ff5c5c');
+        toast.style.setProperty('--rare-toast-accent-rgb', '255,92,92');
+        toast.style.setProperty('--rare-toast-bg', '#1b0b0d');
+        if (toast._body) toast._body.textContent = 'Не удалось посчитать: ' + (reason || 'ошибка запроса');
+        showToastEl(toast);
+        clearTimeout(toast._errHideTimer);
+        toast._errHideTimer = setTimeout(() => { toast.classList.remove('show'); }, 6000);
+    }
     // Синхронизирует постоянный тост с СОСТОЯНИЕМ ОЧЕРЕДИ, а не только с локальным
     // циклом публикации. Благодаря этому тост висит на ЛЮБОЙ вкладке, где есть
     // активная очередь (в т.ч. на той, что только поставила лот, но публикует
@@ -1991,6 +2031,7 @@
             #rareModal .rareChip .rareChipGrip:active { cursor:grabbing; }
             #rareModal .rareChip .rareChipNum { flex:0 0 auto;min-width:18px;text-align:center;color:rgba(255,255,255,.42);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;user-select:none; }
             #rareModal .rareListPriorityNote { margin:-6px 0 12px;padding:8px 10px;border-left:2px solid rgba(var(--rare-accent-rgb,0,186,120),.5);background:rgba(var(--rare-accent-rgb,0,186,120),.06);border-radius:0 6px 6px 0;color:#9fb0c0;font-size:11px;line-height:1.45; }
+            #rareModal .rareFpWarnNote { margin:10px 0 0;padding:8px 10px;border-left:2px solid rgba(255,92,92,.6);background:rgba(255,92,92,.08);border-radius:0 6px 6px 0;color:#ff9a9a;font-size:11px;line-height:1.45; }
             #rareModal .rareChip.rareDragActive { display:none!important; }
             #rareModal .rareList.rareDragging { display:flex!important;flex-direction:column!important;gap:8px!important; }
             #rareModal .rareDragPlaceholder { flex:0 0 auto;border-radius:8px;border:1.5px solid rgba(var(--rare-accent-rgb,0,186,120),.6);background:rgba(var(--rare-accent-rgb,0,186,120),.1);box-sizing:border-box; }
@@ -2479,7 +2520,7 @@
         return '<div class="rareItemsView" data-view="' + tab + '"' + (hidden ? ' style="display:none"' : '') + '>'
             + (subTabsHtml || '')
             + '<div class="rareCol"><div class="rareCard">'
-            + '<h4><span class="rareListTitle"></span><span class="rareListHeadActions"><button type="button" class="rareIconBtn rareListDefaults" title="Загрузить готовую базу" style="display:none">' + wandSvg() + '</button><button type="button" class="rareIconBtn rareIconBtnDanger rareListClear" title="Очистить список">' + trashSvg() + '</button></span></h4>'
+            + '<h4><span class="rareListTitle"></span><span class="rareListHeadActions"><button type="button" class="rareIconBtn rareListDefaults" title="Загрузить готовую базу, добавляет скины уже к вашим существующим" style="display:none">' + wandSvg() + '</button><button type="button" class="rareIconBtn rareIconBtnDanger rareListClear" title="Очистить список">' + trashSvg() + '</button></span></h4>'
             + '<p class="rareSubTxt rareListDesc"></p>'
             + '<p class="rareSubTxt rareListPriorityNote">Редкие предметы показываются в том же порядке (приоритете), как вы выставили их в списке — перетаскивайте за иконку слева. Этот порядок используется и в автоназвании, и при автозагрузке лота на FunPay.</p>'
             + '<div class="rareInputRow"><input type="text" class="rareInput" placeholder="" maxlength="80"><button class="rareAddBtn" title="Добавить">+</button></div>'
@@ -2543,7 +2584,8 @@
         + '<div class="rareCol">'
         + '<div class="rareCard cstCardTight"><h4>Uploader</h4>'
         + '<p class="rareSubTxt">golden_key из cookie авторизованного аккаунта FunPay.</p>'
-        + '<div class="rareInputRow"><input type="password" class="fpGoldenKey" autocomplete="off"></div></div>'
+        + '<div class="rareInputRow"><input type="password" class="fpGoldenKey" autocomplete="off"></div>'
+        + '<p class="rareSubTxt rareFpWarnNote">Загрузка на FunPay идёт через ЭТОТ браузер и его IP/прокси, а не через отдельный браузер, где у вас открыт FunPay. Если вы используете антик с прокси, то залогиньтесь на маркет через него и установите скрипт там.</p></div>'
         + '<div class="rareCard cstCardTight"><h4>Настройки категории</h4>'
         + _funpaySubTabsHtml
         + FUNPAY_ADAPTER_KEYS.map(_funpayCategoryPanelHtml).join('')
@@ -2798,6 +2840,11 @@
                         }));
                     draft().items = existing.concat(toAdd);
                     renderList();
+                    showNoticeToast({
+                        key: 'rare-defaults-added',
+                        title: 'Готовая база',
+                        body: 'Добавлены редкие из готовой базы, уже существующие были сохранены. Сверьте список и убедитесь что все нужные редкие предметы выбраны.'
+                    });
                 });
             }
             renderList();
@@ -3905,6 +3952,7 @@
         const ids = new Set(items.map(getMarketIndexItemId).filter(Boolean).filter(id => !cache[id]));
         if (!ids.size) return;
         publishedAgeLoading = true;
+        showPublishedAgeProgressToast('Считаю дни с публикации… (' + ids.size + ')');
         try {
             const basePage = Math.max(1, parseInt(new URLSearchParams(location.search || '').get('page'), 10) || 1);
             for (let offset = 0; offset < PUBLISHED_AGE_MAX_PAGES && ids.size; offset++) {
@@ -3926,8 +3974,10 @@
                 applyPublishedAgeCache();
                 if (data && data.hasNextPage === false) break;
             }
+            hidePublishedAgeProgressToast();
         } catch (e) {
             logScriptError('published age failed', e);
+            showPublishedAgeErrorToast(formatErrorText(e, 'ошибка запроса'));
         } finally {
             publishedAgeLoading = false;
             if (publishedAgePending) {
@@ -4102,20 +4152,39 @@
             const appIdMatch = href.match(/\/market\/listings\/(\d+)\//i);
             // Только CS2. Если ссылки нет — не можем подтвердить принадлежность, пропускаем.
             if (!appIdMatch || appIdMatch[1] !== '730') return;
-            // Оригинальная цена предмета: data-value в блоке цены (исключаем нашу вставку).
-            const priceNode = item.querySelector('.lztSv--item--price--new .Value[data-value], .Value.mainc[data-value]');
+            // Оригинальная цена предмета: ищем data-value ТОЛЬКО в оригинальном блоке цены
+            // LZT, ЯВНО исключая нашу вставку .rareSteamItemExtraPrice. Берём последний
+            // .Value[data-value] (у LZT это итоговая стоимость позиции), не наш span.
+            const priceBox = item.querySelector('.lztSv--item--price--new');
+            if (!priceBox) return;
+            const valueNodes = Array.from(priceBox.querySelectorAll('.Value[data-value]'))
+                .filter(n => !n.closest('.rareSteamItemExtraPrice'));
+            const priceNode = valueNodes[valueNodes.length - 1];
             const value = Number(priceNode && priceNode.getAttribute('data-value'));
             if (Number.isFinite(value) && value > 0) { sum += value; counted++; }
         });
         return counted ? sum : 0;
     }
 
-    // База для процента: если удалось просуммировать оригинальную стоимость CS2-предметов
-    // — используем её (корректно при мульти-игровом инвентаре). Иначе fallback на общий
-    // тотал страницы (когда сама страница уже отфильтрована по app_id=730).
+    // База для процента считается так:
+    //  - если на странице ЕСТЬ предметы других игр (не CS2) — общий тотал страницы
+    //    включает их, поэтому берём просуммированную оригинальную стоимость только
+    //    CS2-предметов (getSteamValueCs2OriginalTotal);
+    //  - если инвентарь ЦЕЛИКОМ CS2 (нет чужих игр) — общий тотал страницы и есть
+    //    стоимость CS2, и он точнее поштучной суммы (не зависит от парсинга data-value).
     function getSteamValueCs2Base(root) {
+        const scope = root || document;
+        const allItems = Array.from(scope.querySelectorAll('.lztSv--item'));
+        const nonCs2 = allItems.some(item => {
+            const link = item.querySelector('.lztSv_link--item-new[href*="/market/listings/"]');
+            const href = link && link.href ? link.href : '';
+            const m = href.match(/\/market\/listings\/(\d+)\//i);
+            return m && m[1] !== '730';
+        });
+        const total = getSteamValueOriginalTotal(root);
+        if (!nonCs2 && total > 0) return total; // инвентарь весь CS2 → тотал = CS2-стоимость
         const cs2 = getSteamValueCs2OriginalTotal(root);
-        return cs2 > 0 ? cs2 : getSteamValueOriginalTotal(root);
+        return cs2 > 0 ? cs2 : total;
     }
 
     function formatSteamValueDeltaText(originalTotal, marketTotal) {
