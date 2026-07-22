@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MARKET ENHANCER
 // @namespace    lzt.market.rare-skins
-// @version      1.2.1
+// @version      1.2.2
 // @description  rare shit 
 // @match        https://lzt.market/*
 // @match        https://lolz.team/*
@@ -414,7 +414,7 @@
             listDesc: 'Добавьте названия скинов League of Legends, которые нужно искать в объявлении Riot.',
             inputPlaceholder: 'Название скина LoL',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'Elementalist Lux', color: '#ffce14' }, { name: 'DJ Sona', color: '#ffce14' }],
+            defaultWanted: [],
         },
         fortnite: {
             tabKey: 'fortnite',
@@ -471,7 +471,7 @@
             listDesc: 'Добавьте персонажей Genshin Impact, которых нужно искать в объявлении.',
             inputPlaceholder: 'Название персонажа Genshin',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'Нахида', color: '#ffce14' }],
+            defaultWanted: [],
         },
         honkai: {
             tabKey: 'mihoyo',
@@ -484,7 +484,7 @@
             listDesc: 'Добавьте персонажей Honkai: Star Rail, которых нужно искать в объявлении.',
             inputPlaceholder: 'Название персонажа Honkai',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'Доктор Рацио', color: '#ffce14' }],
+            defaultWanted: [],
         },
         zenless: {
             tabKey: 'mihoyo',
@@ -497,7 +497,7 @@
             listDesc: 'Добавьте персонажей Zenless Zone Zero, которых нужно искать в объявлении.',
             inputPlaceholder: 'Название персонажа Zenless',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'Харумаса', color: '#ffce14' }],
+            defaultWanted: [],
         },
         steam: {
             tabKey: 'steam',
@@ -536,7 +536,7 @@
             listDesc: 'Добавьте названия танков, которые нужно выделять на страницах World of Tanks.',
             inputPlaceholder: 'Название танка',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'Pz.Kpfw. VII', color: '#ffce14' }, { name: '113 BO', color: '#ffce14' }, { name: 'Foch 155', color: '#ffce14' }],
+            defaultWanted: [],
         },
         ubisoft: {
             tabKey: 'ubisoft',
@@ -549,7 +549,7 @@
             listDesc: 'Добавьте названия скинов, которые нужно искать в объявлениях Rainbow Six.',
             inputPlaceholder: 'Название скина',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'BLACK ICE', color: '#ffce14' }],
+            defaultWanted: [],
         },
         brawl: {
             tabKey: 'supercell',
@@ -562,7 +562,7 @@
             listDesc: 'Добавьте бойцов и минимальную силу под иконкой молнии. Боец попадет в блок только если сила не ниже порога.',
             inputPlaceholder: 'Имя бойца',
             defaultColor: '#ffce14',
-            defaultWanted: [{ name: 'MICO', color: '#ffce14', minPower: 11 }],
+            defaultWanted: [],
         },
     };
 
@@ -660,7 +660,7 @@
                 const skinCount = Math.max(0, getValorantSkinCount() | 0);
                 const agentCount = Math.max(0, getValorantAgentCount() | 0);
                 const regionName = getValorantRegionName();   // display name с LZT (регион)
-                const rankName = getValorantRankName();        // «Последний ранг»
+                const rankName = getValorantRankName();        // «Текущий ранг»
                 return {
                     count: skinCount,                          // {count} = скины
                     rareNames: getAutoTitleRareSkinNames(),    // {rare} = редкие скины Valorant (WeaponSkins)
@@ -704,19 +704,22 @@
         return VALORANT_REGION_TO_SERVER[norm(regionName)] || '';
     }
 
-    // Ранг LZT (англ., напр. «Gold 1») -> значение fields[rank] на FunPay (рус.).
-    // Спец-статусы: Unranked/нет калибровки -> «Калибровка не открыта».
+    // Ранг LZT (англ., напр. «Gold 1») -> value fields[rank] на FunPay.
+    // Для спец-статусов FunPay ждёт не label, а реальные option value из select.
     const VALORANT_RANK_TIER = {
         iron: 'Железо', bronze: 'Бронза', silver: 'Серебро', gold: 'Золото',
         platinum: 'Платина', diamond: 'Алмаз', ascendant: 'Расцвет',
         immortal: 'Бессмертный', radiant: 'Радиант'
     };
+    const FUNPAY_VALORANT_RANK_LOCKED = '%Калибровка не открыта-Ranked locked';
+    const FUNPAY_VALORANT_RANK_READY = '%Под калибровку-Ranked unlocked';
     function mapValorantRankToFunpay(rankName) {
         const raw = String(rankName || '').trim();
         if (!raw) return '';
         const low = norm(raw);
         if (low === norm('Радиант') || low === 'radiant') return 'Радиант';
-        if (/unranked|без ранга|нет ранга|ranked ready|калибровк/i.test(raw)) return 'Калибровка не открыта';
+        if (/ranked ready/i.test(raw)) return FUNPAY_VALORANT_RANK_READY;
+        if (/unrated|unranked|без ранга|нет ранга|калибровк/i.test(raw)) return FUNPAY_VALORANT_RANK_LOCKED;
         // «Gold 1» / «Золото 1» -> tier + номер
         const m = raw.match(/([A-Za-zА-Яа-яё]+)\s*([1-3])?/);
         if (!m) return '';
@@ -2035,20 +2038,21 @@
             #rareModal .rareChip.rareDragActive { display:none!important; }
             #rareModal .rareList.rareDragging { display:flex!important;flex-direction:column!important;gap:8px!important; }
             #rareModal .rareDragPlaceholder { flex:0 0 auto;border-radius:8px;border:1.5px solid rgba(var(--rare-accent-rgb,0,186,120),.6);background:rgba(var(--rare-accent-rgb,0,186,120),.1);box-sizing:border-box; }
-            #rareModal .rareLevelFilter { margin:8px 0 4px;padding:9px 11px;background:#0e1013;border:1px solid #24272b;border-radius:8px;display:flex;flex-direction:column;gap:8px; }
-            #rareModal .rareLevelToggle { display:inline-flex;align-items:center;gap:8px;color:#e8e8e8;font-size:12px;cursor:pointer;user-select:none; }
+            #rareModal .rareLevelFilter { margin:8px 0 4px;padding:9px 11px;background:color-mix(in srgb,var(--rare-modal-bg-soft) 88%,#000 12%);border:1px solid rgba(var(--rare-accent-rgb,0,186,120),.18);border-radius:8px;display:flex;flex-direction:column;gap:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.03); }
+            #rareModal .rareLevelToggle { display:inline-flex;align-items:center;gap:8px;color:#e8edf1;font-size:12px;cursor:pointer;user-select:none; }
             #rareModal .rareLevelToggle input { width:16px;height:16px;accent-color:var(--rare-accent,#00ba78);cursor:pointer; }
             #rareModal .rareLevelRow { display:flex;align-items:center;gap:8px; }
             #rareModal .rareLevelRow .rareLevelLbl { color:#cfd3d8;font-size:12px; }
-            #rareModal .rareLevelRow .rareLevelMin { width:110px;background:#0c0e10;color:#eee;border:1px solid #2f3338;border-radius:6px;padding:5px 8px;font-size:12px;outline:none; }
-            #rareModal .rareLevelRow .rareLevelMin:focus { border-color:var(--rare-accent,#00ba78); }
+            #rareModal .rareLevelRow .rareLevelMin { width:110px;background:color-mix(in srgb,var(--rare-modal-bg-strong) 88%,#000 12%);color:#eef3f6;border:1px solid rgba(var(--rare-accent-rgb,0,186,120),.22);border-radius:6px;padding:5px 8px;font-size:12px;outline:none; }
+            #rareModal .rareLevelRow .rareLevelMin:focus { border-color:var(--rare-accent,#00ba78);box-shadow:0 0 0 2px rgba(var(--rare-accent-rgb,0,186,120),.12); }
             #rareModal .rareChip .name { flex:1;color:#e8e8e8;font-size:13px;text-transform:uppercase;display:flex;align-items:center;min-height:100%; }
             #rareModal .rareChip .rareChipChecks { flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;min-width:102px; }
             #rareModal .rareChip .rareEffectSelect { flex:0 0 auto;background:#0c0e10;color:#eee;border:1px solid #2f3338;border-radius:6px;padding:5px 7px;font-size:12px;outline:none;cursor:pointer; }
             #rareModal .rareChip .rareEffectSelect:focus { border-color:var(--rare-accent); }
             #rareModal .rareChip .rareEffectCheck { flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;color:#cfd3d8;font-size:12px;cursor:pointer;user-select:none;white-space:nowrap; }
             #rareModal .rareChip .rareEffectCheck input { position:absolute!important;opacity:0!important;width:0!important;height:0!important;margin:0!important;padding:0!important;pointer-events:none!important;clip:rect(0 0 0 0)!important; }
-            #rareModal .rareChip .rarePowerCheck input { position:static!important;opacity:1!important;width:46px!important;height:24px!important;margin:0!important;padding:2px 6px!important;pointer-events:auto!important;clip:auto!important;background:#0c0e10!important;color:#eee!important;border:1px solid #2f3338!important;border-radius:6px!important;font-size:12px!important; }
+            #rareModal .rareChip .rarePowerCheck input { position:static!important;opacity:1!important;width:46px!important;height:24px!important;margin:0!important;padding:2px 6px!important;pointer-events:auto!important;clip:auto!important;background:color-mix(in srgb,var(--rare-modal-bg-strong) 88%,#000 12%)!important;color:#eef3f6!important;border:1px solid rgba(var(--rare-accent-rgb,0,186,120),.22)!important;border-radius:6px!important;font-size:12px!important;outline:none!important; }
+            #rareModal .rareChip .rarePowerCheck input:focus { border-color:var(--rare-accent,#00ba78)!important;box-shadow:0 0 0 2px rgba(var(--rare-accent-rgb,0,186,120),.12)!important; }
             #rareModal .rareChip .rareEffectMark { display:inline-block!important;width:18px!important;height:18px!important;min-width:18px!important;border:2px solid rgba(var(--rare-accent-rgb),.36)!important;border-radius:4px!important;background:color-mix(in srgb, var(--rare-modal-bg-soft) 82%, #000 18%)!important;position:relative!important;box-sizing:border-box!important;flex:0 0 auto!important;transition:background .12s,border-color .12s,box-shadow .12s; }
             #rareModal .rareChip .rareEffectMark.on { background:var(--rare-accent)!important;border-color:var(--rare-accent)!important;box-shadow:0 0 10px rgba(var(--rare-accent-rgb),.18)!important; }
             #rareModal .rareChip .rareEffectMark.on::after { content:''!important;display:block!important;position:absolute!important;left:4px!important;top:0px!important;width:5px!important;height:10px!important;border:solid #fff!important;border-width:0 2px 2px 0!important;transform:rotate(45deg)!important;box-sizing:border-box!important; }
@@ -3241,7 +3245,10 @@
                 wanted,
                 activityLevels: actDraft.map(l => ({ min: l.min, max: l.max, color: l.color, effect: sanitizeActivityEffect(l.effect) })),
                 custom: Object.assign({}, customDraft),
-                api: Object.assign({}, apiDraft, { token: '' })
+                api: {
+                    publishedAgeEnabled: apiDraft.publishedAgeEnabled !== false,
+                    cs2InventoryPriceEnabled: apiDraft.cs2InventoryPriceEnabled !== false
+                }
             };
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -4062,7 +4069,10 @@
     }
 
     function getSteamValueItemQuantity(item) {
-        const qtyNode = item && item.querySelector('.lztSv--item--price--new .Tooltip');
+        const priceBox = item && item.querySelector('.lztSv--item--price--new');
+        const qtyNode = priceBox
+            ? Array.from(priceBox.querySelectorAll('.Tooltip')).find(node => /x\s*\d+\s*шт\./i.test(String(node.textContent || '')))
+            : null;
         const text = String(qtyNode ? qtyNode.textContent : '').trim();
         const match = text.match(/x\s*(\d+)\s*шт\./i);
         return match ? Math.max(1, parseInt(match[1], 10) || 1) : 1;
@@ -4669,8 +4679,8 @@
     }
     // Регион Valorant (display name с LZT), строго из блока Valorant.
     function getValorantRegionName() { return getValorantCounterLabel('Регион'); }
-    // Ранг Valorant: берём «Последний ранг» (display name с LZT).
-    function getValorantRankName() { return getValorantCounterLabel('Последний ранг'); }
+    // Ранг Valorant: берём «Текущий ранг» (display name с LZT).
+    function getValorantRankName() { return getValorantCounterLabel('Текущий ранг'); }
     // Кол-во скинов Valorant: из заголовка «N скина» (type=weapons) с фолбэком на li.
     function getValorantSkinCount() {
         const ul = document.querySelector('ul[data-key="WeaponSkins"]');
