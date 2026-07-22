@@ -33,6 +33,7 @@ Userscript для удобной работы с [LZT Market](https://lzt.market
 <img width="427" height="42" alt="image" src="https://github.com/user-attachments/assets/58bc7553-8912-4260-8f80-e971c1375c55" />
 
 **Дни активности.** На странице товара рядом с последней активностью добавляется понятный бейдж с количеством дней. Цвет зависит от настроенных диапазонов.
+
 <img width="300" height="88" alt="image" src="https://github.com/user-attachments/assets/6bf8681e-0fe0-4744-97ae-28f78ba0c610" />
 
 
