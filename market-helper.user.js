@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MARKET ENHANCER
 // @namespace    lzt.market.rare-skins
-// @version      1.2.3
+// @version      1.2.5
 // @description  rare shit 
 // @match        https://lzt.market/*
 // @match        https://lolz.team/*
@@ -1176,11 +1176,13 @@
     function getPublishedAgeProgressToast() {
         let toast = document.querySelector('.rarePublishedAgeToast');
         if (!toast) {
-            toast = createNode('div', 'rareToast rarePublishedAgeToast');
-            toast.innerHTML = '<span class="rareFpSpinner"></span><span class="rareFpPublishText"><span class="rareFpPublishTitle">Дни с публикации</span><span class="rareFpPublishBody"></span></span>';
+            toast = createNode('div', 'rareToast rareFpPublishToast rarePublishedAgeToast');
+            toast.innerHTML = '<span class="rareFpSpinner"></span><span class="rareFpPublishBody"></span>';
             mountToast(toast);
             toast._body = toast.querySelector('.rareFpPublishBody');
         }
+        toast.classList.add('rareFpPublishToast');
+        if (!toast._body) toast._body = toast.querySelector('.rareFpPublishBody');
         return toast;
     }
     function showPublishedAgeProgressToast(text) {
@@ -1190,7 +1192,7 @@
         toast.style.setProperty('--rare-toast-accent', accent);
         toast.style.setProperty('--rare-toast-accent-rgb', hexToRgbList(accent));
         toast.style.setProperty('--rare-toast-bg', CUSTOM.modalBg || DEFAULT_CUSTOM.modalBg);
-        if (toast._body) toast._body.textContent = text || 'Считаю дни с публикации…';
+        if (toast._body) toast._body.textContent = text || 'Загружаю дни с публикации...';
         showToastEl(toast);
     }
     function hidePublishedAgeProgressToast() {
@@ -1952,7 +1954,7 @@
             .rareSteamItemExtraLink { display:inline-flex;align-items:center;justify-content:center;color:inherit;text-decoration:none;opacity:.92; }
             .rareSteamItemExtraLink:hover { opacity:1; }
             .rareSteamItemExtraLink svg { width:13px;height:13px;display:block; }
-            .rarePublishedAge { --rare-published-rgb:0,186,120;box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;margin-left:7px;padding:1px 7px!important;border:1px solid rgba(var(--rare-published-rgb),.24);border-radius:999px;background:rgba(var(--rare-published-rgb),.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.035);font-family:inherit!important;font-size:11.5px!important;font-weight:650!important;line-height:17px!important;font-variant-numeric:tabular-nums;letter-spacing:.01em;white-space:nowrap;vertical-align:middle;transform:translateY(-1px); }
+            .rarePublishedAge { --rare-published-rgb:0,186,120;box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;margin-left:7px;padding:1px 7px!important;border:1px solid rgba(var(--rare-published-rgb),.24);border-radius:999px;background:rgba(var(--rare-published-rgb),.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.035);font-family:inherit!important;font-size:11.5px!important;font-weight:650!important;line-height:17px!important;font-variant-numeric:tabular-nums;letter-spacing:.01em;white-space:nowrap;vertical-align:baseline;transform:none; }
             .rarePublishedAge svg { width:11px;height:11px;display:block;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:.86; }
             .rarePublishedAgeValue,.rarePublishedAgeSuffix { display:inline; }
             @media (max-width:650px) { .rarePublishedAgeSuffix { display:none; } }
@@ -2123,6 +2125,8 @@
             .rareToastCheck svg { width:18px;height:18px;display:block;stroke:currentColor;fill:none; }
             .rareFpSpinner { width:18px;height:18px;flex:0 0 auto;border:2.4px solid rgba(var(--rare-toast-accent-rgb,63,188,135),.28);border-top-color:var(--rare-toast-accent,#3fbc87);border-radius:50%;animation:rarePriceSpin .7s linear infinite; }
             .rareFpPublishToast { pointer-events:auto;cursor:default; }
+            .rarePublishedAgeToast { gap:9px;padding:10px 14px;border-radius:12px; }
+            .rarePublishedAgeToast .rareFpPublishBody { font-size:12px;font-weight:600;line-height:18px;color:rgba(238,243,248,.82);white-space:nowrap; }
 
             .rareFpPublishToast .rareFpPublishText { display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 auto; }
             .rareFpPublishCancel { flex:0 0 auto;margin-left:6px;padding:5px 12px;border-radius:8px;font:700 12px/1 "Open Sans",Arial,sans-serif;letter-spacing:.02em;cursor:pointer;color:#ffd9d9;border:1px solid rgba(255,92,92,.42);background:linear-gradient(180deg,rgba(255,92,92,.18),rgba(255,92,92,.07));transition:background .15s ease,border-color .15s ease,box-shadow .15s ease; }
@@ -3975,7 +3979,7 @@
         const ids = new Set(items.map(getMarketIndexItemId).filter(Boolean).filter(id => !cache[id]));
         if (!ids.size) return;
         publishedAgeLoading = true;
-        showPublishedAgeProgressToast('Считаю дни с публикации… (' + ids.size + ')');
+        showPublishedAgeProgressToast('Загружаю дни с публикации... (' + ids.size + ')');
         try {
             const basePage = Math.max(1, parseInt(new URLSearchParams(location.search || '').get('page'), 10) || 1);
             for (let offset = 0; offset < PUBLISHED_AGE_MAX_PAGES && ids.size; offset++) {
