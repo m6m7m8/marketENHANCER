@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MARKET ENHANCER
 // @namespace    lzt.market.rare-skins
-// @version      1.2.2
+// @version      1.2.3
 // @description  rare shit 
 // @match        https://lzt.market/*
 // @match        https://lolz.team/*
@@ -1952,7 +1952,10 @@
             .rareSteamItemExtraLink { display:inline-flex;align-items:center;justify-content:center;color:inherit;text-decoration:none;opacity:.92; }
             .rareSteamItemExtraLink:hover { opacity:1; }
             .rareSteamItemExtraLink svg { width:13px;height:13px;display:block; }
-            .rarePublishedAge { margin-left:4px;color:inherit;font:inherit;white-space:nowrap; }
+            .rarePublishedAge { --rare-published-rgb:0,186,120;box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;margin-left:7px;padding:1px 7px!important;border:1px solid rgba(var(--rare-published-rgb),.24);border-radius:999px;background:rgba(var(--rare-published-rgb),.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.035);font-family:inherit!important;font-size:11.5px!important;font-weight:650!important;line-height:17px!important;font-variant-numeric:tabular-nums;letter-spacing:.01em;white-space:nowrap;vertical-align:middle;transform:translateY(-1px); }
+            .rarePublishedAge svg { width:11px;height:11px;display:block;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:.86; }
+            .rarePublishedAgeValue,.rarePublishedAgeSuffix { display:inline; }
+            @media (max-width:650px) { .rarePublishedAgeSuffix { display:none; } }
             .rarePriceSpin { width:13px;height:13px;flex:0 0 auto;border-radius:50%;border:2px solid rgba(255,255,255,.22);border-top-color:rgba(255,255,255,.85);animation:rarePriceSpin .7s linear infinite; }
             @keyframes rarePriceSpin { to { transform:rotate(360deg); } }
             .rareCollections { position:relative;z-index:1000;overflow:visible; }
@@ -3782,6 +3785,7 @@
     let publishedAgeLastSignature = '';
     let publishedAgeObserver = null;
     let publishedAgePending = false;
+    const MARKET_INDEX_ITEM_SELECTOR = '.marketItemCard[id^="marketItem--"],.marketIndexItem[id^="marketItem--"]';
 
     function normalizePublishedAgeCache(raw) {
         const parsed = raw && typeof raw === 'object' ? raw : {};
@@ -3812,9 +3816,12 @@
         if (!item) return '';
         const id = (item.id || '').match(/marketItem--(\d+)/);
         if (id) return id[1];
-        const link = item.querySelector('a[href*="lzt.market/"]');
-        const hrefId = link && link.href && link.href.match(/lzt\.market\/(\d+)\//);
-        return hrefId ? hrefId[1] : '';
+        const link = item.querySelector('a.LinkClicker[href],a.text[href],a[href*="lzt.market/"]');
+        if (!link) return '';
+        try {
+            const hrefId = new URL(link.getAttribute('href'), location.origin).pathname.match(/^\/(\d+)(?:\/|$)/);
+            return hrefId ? hrefId[1] : '';
+        } catch (_) { return ''; }
     }
 
     function extractPublishedDate(item) {
@@ -3826,16 +3833,25 @@
     function renderPublishedAge(item, publishedDate) {
         const id = getMarketIndexItemId(item);
         if (!id || !Number.isFinite(publishedDate) || publishedDate <= 0) return;
-        const target = item.querySelector('.marketIndexItem--otherInfo .muted') || item.querySelector('.marketIndexItem-inlineGroup .inline-info');
+        // Новый дизайн: время объявления живёт прямо под заголовком в .itemTime.
+        // Старые цели оставлены фолбэком для страниц, где карточки ещё не обновились.
+        const target = item.querySelector('.itemTime')
+            || item.querySelector('.marketIndexItem--otherInfo .muted')
+            || item.querySelector('.marketIndexItem-inlineGroup .inline-info');
         if (!target) return;
         const days = Math.max(0, Math.floor((Date.now() / 1000 - publishedDate) / 86400));
-        let badge = target.querySelector('.rarePublishedAge');
+        let badge = item.querySelector('.rarePublishedAge');
         if (!badge) {
             badge = createNode('span', 'rarePublishedAge');
-            target.appendChild(badge);
+            badge.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.25 5.75h9.5M5.25 2.5v2.25m5.5-2.25v2.25M4.5 3.75h7A1.5 1.5 0 0 1 13 5.25v6.25a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 11.5V5.25a1.5 1.5 0 0 1 1.5-1.5Z"/></svg><span class="rarePublishedAgeValue"></span><span class="rarePublishedAgeSuffix">с публикации</span>';
         }
-        badge.textContent = '(' + days + ' ' + pluralDays(days) + ' с публикации)';
+        if (badge.parentElement !== target) target.appendChild(badge);
+        const value = badge.querySelector('.rarePublishedAgeValue');
+        if (value) value.textContent = days + ' ' + pluralDays(days);
+        badge.title = 'Объявление опубликовано ' + days + ' ' + pluralDays(days) + ' назад';
+        badge.setAttribute('aria-label', badge.title);
         const lvl = levelForDays(days);
+        badge.style.setProperty('--rare-published-rgb', hexToRgbList(lvl.color));
         applyLevelStyle(badge, lvl.color, lvl.effect);
     }
 
@@ -3860,7 +3876,7 @@
         if (!publishedAgeEnabled()) { clearPublishedAgeBadges(); return; }
         if (isMarketRootPage()) { clearPublishedAgeBadges(); return; } // не на главной
         const cache = loadPublishedAgeCache();
-        document.querySelectorAll('.marketIndexItem[id^="marketItem--"]').forEach(item => {
+        document.querySelectorAll(MARKET_INDEX_ITEM_SELECTOR).forEach(item => {
             const id = getMarketIndexItemId(item);
             if (id && cache[id]) renderPublishedAge(item, cache[id].publishedDate);
         });
@@ -3879,7 +3895,7 @@
         if (publishedAgeScanTimer) return;
         publishedAgeScanTimer = setTimeout(() => {
             publishedAgeScanTimer = 0;
-            const ids = Array.from(document.querySelectorAll('.marketIndexItem[id^="marketItem--"]')).map(getMarketIndexItemId).filter(Boolean);
+            const ids = Array.from(document.querySelectorAll(MARKET_INDEX_ITEM_SELECTOR)).map(getMarketIndexItemId).filter(Boolean);
             const signature = ids.join(',');
             if (signature && signature !== publishedAgeLastSignature) {
                 publishedAgeLastSignature = signature;
@@ -3893,7 +3909,7 @@
         if (isMarketRootPage()) { stopPublishedAgeWatcher(); return; } // не на главной
         if (publishedAgeObserver || !document.body) return;
         publishedAgeObserver = new MutationObserver(records => {
-            if (records.some(record => Array.from(record.addedNodes).some(node => node && node.nodeType === 1 && (node.matches && node.matches('.marketIndexItem[id^="marketItem--"]') || node.querySelector && node.querySelector('.marketIndexItem[id^="marketItem--"]'))))) {
+            if (records.some(record => Array.from(record.addedNodes).some(node => node && node.nodeType === 1 && (node.matches && node.matches(MARKET_INDEX_ITEM_SELECTOR) || node.querySelector && node.querySelector(MARKET_INDEX_ITEM_SELECTOR))))) {
                 schedulePublishedAgeScan();
             }
         });
@@ -3955,7 +3971,7 @@
         }
         if (publishedAgeLoading) { publishedAgePending = true; return; }
         const cache = loadPublishedAgeCache();
-        const items = Array.from(document.querySelectorAll('.marketIndexItem[id^="marketItem--"]'));
+        const items = Array.from(document.querySelectorAll(MARKET_INDEX_ITEM_SELECTOR));
         const ids = new Set(items.map(getMarketIndexItemId).filter(Boolean).filter(id => !cache[id]));
         if (!ids.size) return;
         publishedAgeLoading = true;
